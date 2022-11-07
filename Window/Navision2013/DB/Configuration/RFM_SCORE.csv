@@ -1,0 +1,126 @@
+R,F,M,Segment,RFM
+1,1,1,Lost,111
+1,1,2,Lost,112
+1,1,3,Lost,113
+1,1,4,Lost,114
+1,1,5,Hibernating,115
+1,2,1,Hibernating,121
+1,2,2,Hibernating,122
+1,2,3,At Risk,123
+1,2,4,At Risk,124
+1,2,5,At Risk,125
+1,3,1,At Risk,131
+1,3,2,At Risk,132
+1,3,3,At Risk,133
+1,3,4,At Risk,134
+1,3,5,At Risk,135
+1,4,1,At Risk,141
+1,4,2,At Risk,142
+1,4,3,At Risk,143
+1,4,4,Can not lose them,144
+1,4,5,Can not lose them,145
+1,5,1,Hibernating,151
+1,5,2,At Risk,152
+1,5,3,At Risk,153
+1,5,4,Can not lose them,154
+1,5,5,Can not lose them,155
+2,1,1,Hibernating,211
+2,1,2,Hibernating,212
+2,1,3,Hibernating,213
+2,1,4,Hibernating,214
+2,1,5,Hibernating,215
+2,2,1,About to sleep,221
+2,2,2,Customers Need Attenton,222
+2,2,3,Customers Need Attenton,223
+2,2,4,At Risk,224
+2,2,5,At Risk,225
+2,3,1,About to sleep,231
+2,3,2,Customers Need Attenton,232
+2,3,3,Loyal Customers,233
+2,3,4,Loyal Customers,234
+2,3,5,Loyal Customers,235
+2,4,1,About to sleep,241
+2,4,2,At Risk,242
+2,4,3,Loyal Customers,243
+2,4,4,Loyal Customers,244
+2,4,5,Loyal Customers,245
+2,5,1,Promising,251
+2,5,2,At Risk,252
+2,5,3,Loyal Customers,253
+2,5,4,Loyal Customers,254
+2,5,5,Loyal Customers,255
+3,1,1,Potential Loyalist,311
+3,1,2,Potential Loyalist,312
+3,1,3,Potential Loyalist,313
+3,1,4,Potential Loyalist,314
+3,1,5,Potential Loyalist,315
+3,2,1,Potential Loyalist,321
+3,2,2,Potential Loyalist,322
+3,2,3,Potential Loyalist,323
+3,2,4,Potential Loyalist,324
+3,2,5,Potential Loyalist,325
+3,3,1,Potential Loyalist,331
+3,3,2,Potential Loyalist,332
+3,3,3,Loyal Customers,333
+3,3,4,Loyal Customers,334
+3,3,5,Loyal Customers,335
+3,4,1,Promising,341
+3,4,2,Promising,342
+3,4,3,Loyal Customers,343
+3,4,4,Loyal Customers,344
+3,4,5,Loyal Customers,345
+3,5,1,Promising,351
+3,5,2,Promising,352
+3,5,3,Loyal Customers,353
+3,5,4,Loyal Customers,354
+3,5,5,Loyal Customers,355
+4,1,1,Recent Customers,411
+4,1,2,Potential Loyalist,412
+4,1,3,Potential Loyalist,413
+4,1,4,Potential Loyalist,414
+4,1,5,Potential Loyalist,415
+4,2,1,Potential Loyalist,421
+4,2,2,Potential Loyalist,422
+4,2,3,Potential Loyalist,423
+4,2,4,Potential Loyalist,424
+4,2,5,Potential Loyalist,425
+4,3,1,Potential Loyalist,431
+4,3,2,Potential Loyalist,432
+4,3,3,Loyal Customers,433
+4,3,4,Loyal Customers,434
+4,3,5,Loyal Customers,435
+4,4,1,Promising,441
+4,4,2,Promising,442
+4,4,3,Loyal Customers,443
+4,4,4,Champion,444
+4,4,5,Champion,445
+4,5,1,Promising,451
+4,5,2,Promising,452
+4,5,3,Loyal Customers,453
+4,5,4,Champion,454
+4,5,5,Champion,455
+5,1,1,Recent Customers,511
+5,1,2,Potential Loyalist,512
+5,1,3,Potential Loyalist,513
+5,1,4,Recent Customers,514
+5,1,5,Recent Customers,515
+5,2,1,Potential Loyalist,521
+5,2,2,Potential Loyalist,522
+5,2,3,Potential Loyalist,523
+5,2,4,Potential Loyalist,524
+5,2,5,Loyal Customers,525
+5,3,1,Potential Loyalist,531
+5,3,2,Potential Loyalist,532
+5,3,3,Loyal Customers,533
+5,3,4,Loyal Customers,534
+5,3,5,Loyal Customers,535
+5,4,1,Potential Loyalist,541
+5,4,2,Potential Loyalist,542
+5,4,3,Loyal Customers,543
+5,4,4,Champion,544
+5,4,5,Champion,545
+5,5,1,Potential Loyalist,551
+5,5,2,Potential Loyalist,552
+5,5,3,Loyal Customers,553
+5,5,4,Champion,554
+5,5,5,Champion,555
