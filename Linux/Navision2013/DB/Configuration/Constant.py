@@ -11,13 +11,15 @@ apmode = 'append'
 
 class PostgresDbInfo:
     Host = "#PostgresDbInfo_Host"      
-    Port = "#PostgresDbInfo_Port"               
+    Port = "#PostgresDbInfo_Port"     
+    MetadataDB = ".metadatanew"
+    MetadataDBUrl = "jdbc:postgresql://" + Host + "/" + MetadataDB
     PostgresDB = "#PostgresDbInfo_PostgresDB"  
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
     Configurl = "jdbc:postgresql://" + Host + "/Configurator_Linux"
     logsDbUrl = "jdbc:postgresql://" + Host + "/Logs_new"
     url = "jdbc:postgresql://192.10.15.134/"
-    props = {"user":"postgres", "password":"admin", "driver": "org.postgresql.Driver"}   
+    props = {"user":"#PostgresDbInfo_User", "password":"#PostgresDbInfo_Password", "driver": "org.postgresql.Driver"}   
     conn=psycopg2.connect(dbname = PostgresDbInfo.PostgresDB, user = "#PostgresDbInfo_User", password = "#PostgresDbInfo_Password", host = PostgresDbInfo.Host)
 class ConfiguratorDbInfo:
     Host = "#ConfiguratorDbInfo_Host"      #Host IP
