@@ -10,9 +10,9 @@ import pandas as pd
 from builtins import str
 st = dt.datetime.now()
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
@@ -25,13 +25,13 @@ DBEntity = DBName+EntityName
 STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[*]").setAppName("ChartofAccounts").\
+conf = SparkConf().setMaster("local[16]").setAppName("ChartofAccounts").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
                     set("spark.driver.memory","30g").\
                     set("spark.executor.memory","30g").\
-                    set("spark.driver.cores",'*').\
+                    set("spark.driver.cores",16).\
                     set("spark.driver.maxResultSize","0").\
                     set("spark.sql.debug.maxToStringFields", "1000").\
                     set("spark.executor.instances", "20").\
@@ -53,6 +53,7 @@ for dbe in config["DbEntities"]:
         CompanyName=CompanyName.replace(" ","")
         try:
             logger = Logger()
+          
             GLAccount=spark.read.format("parquet").load(STAGE1_PATH+"/G_L Account" )
             GLAccount=GLAccount.select("No_","Name","AccountType","Income_Balance","Indentation","Totaling")
             GLAccount=GLAccount.filter(GLAccount["No_"]!='SERVER')
@@ -141,8 +142,7 @@ for dbe in config["DbEntities"]:
             Config_COA = COA_Table
             PL_Headers = COA_Table.select('GLAccountNo','PLReportHeader')\
                         .withColumnRenamed('GLAccountNo','GLAccount')
-            PL_Headers = PL_Headers.withColumn('PLReportHeader',when(PL_Headers['GLAccount']=='636200', lit('Other expenses'))\
-                        .otherwise(PL_Headers['PLReportHeader']))
+           
             PL_Headers = PL_Headers.filter(PL_Headers['PLReportHeader']!='')
             BS_Headers = COA_Table.select('GLAccountNo','BSReportHeader').filter(COA_Table['BSReportHeader']!='')\
                                 .withColumnRenamed('GLAccountNo','GLAccount')

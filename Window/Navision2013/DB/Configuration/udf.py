@@ -1,7 +1,4 @@
-#Date: 21 Jan 2020
-#Dev: Kamal@Kockpit
-#Ver: 0.1
-#Info: It contains all user defined functions for different transformations in pyspark(spark-2.4)
+
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SQLContext, SparkSession,Row
 from pyspark.conf import SparkConf
@@ -12,7 +9,8 @@ import re,os,datetime,time,sys,traceback
 from datetime import timedelta, date
 from pyspark.sql.functions import col,max as max_,concat,concat_ws,year,when,month,to_date,lit,quarter,expr,sum,count,desc,round,split,last_day,udf,length,explode,split,regexp_replace
 from Configuration import AppConfig as ac
-#from delta.tables import *
+from enum import Flag
+
 
 __all__ = ['JOIN','LJOIN','RJOIN','FULL','RENAME','MONTHSDF','LASTDAY','DRANGE','CONCATENATE',
 	  'UNREDUCE','UNALL','BUCKET', 'ToDF', 'ToDFWitoutPrefix', 'ToTrimmedColumnsDF', 'RenameDuplicateColumns','getSparkConfig','getSparkConfig4g']
@@ -342,10 +340,19 @@ def last_day_of_month(date):
 def daterange(start_date, end_date):
         for n in range(int ((end_date - start_date).days)):
             yield start_date + timedelta(n)
-def addColumnIndex(df):
-        newSchema = StructType(df.schema.fields +[StructField("id",IntegerType(),False),])
-        #print(newSchema)
-        df_added = df.rdd.zipWithIndex().map(lambda row:row[0]+(row[1],)).toDF(newSchema)
+def addColumnIndex(df,sqlCtx):
+        #newSchema = StructType(df.schema.fields +[StructField("id",IntegerType(),False),])
+        #df_added = df.rdd.zipWithIndex().map(lambda row:row[0]+(row[1],)).toDF(newSchema)
+        PandasDF = df.toPandas()
+        list_data = PandasDF.values.tolist()
+        columns = df.columns + ['id']
+        #print(columns)
+        #list_data = [row for row in df.collect()]
+        #list_data = [df.select(df.columns).rdd.flatMap(lambda x: x).collect()]
+        #print(list_data)
+        #sys.exit()
+        indexed = [(*cols, i+1) for i, cols in enumerate(list_data)]
+        df_added = sqlCtx.createDataFrame(indexed,columns)
         return df_added
 def split_dataframe(df,seperate,target_col,new_col):#seperates the elements of the target columns according to seperator
         df = df.withColumn(new_col, split(target_col, seperate))
@@ -363,10 +370,10 @@ def only_minus(df,seperate,target_col,new_col,sqlCtx):
                     flag.append(-1)
 
         flag_df = sqlCtx.createDataFrame(flag, IntegerType())
-        flag_df = addColumnIndex(flag_df)
+        flag_df = addColumnIndex(flag_df,sqlCtx)
         flag_df = flag_df.withColumnRenamed('value','Neg_Flag')
         df_minus = df_minus.withColumn(new_col, explode(df_minus.Totaling))
-        df_minus = addColumnIndex(df_minus)
+        df_minus = addColumnIndex(df_minus,sqlCtx)
         df_minus=df_minus.join(flag_df,df_minus.id==flag_df.id)
         df_minus = df_minus.drop('id')
         df_minus = df_minus.sort('LineNo_')
@@ -384,10 +391,14 @@ def divide(df,seperate,target_col,new_col,sqlCtx):
                 for i in range(1,len(j)):
                     divide_flag.append("D")
         flag_df = sqlCtx.createDataFrame(divide_flag, StringType())
-        flag_df = addColumnIndex(flag_df)
+        #from pyspark.sql.functions import desc, row_number, monotonically_increasing_id
+        #from pyspark.sql.window import Window
+        #flag_df = flag_df.withColumn('id', row_number().over(Window.orderBy(monotonically_increasing_id())) - 1)
+        flag_df = addColumnIndex(flag_df,sqlCtx)
+        
         flag_df = flag_df.withColumnRenamed('value','Divisor_Flag')
         df_divide = df_divide.withColumn(new_col, explode(df_divide.Totaling))
-        df_divide = addColumnIndex(df_divide)
+        df_divide = addColumnIndex(df_divide,sqlCtx)
         df_divide = df_divide.join(flag_df,df_divide.id==flag_df.id).drop('id')
         return df_divide       
 def plus(df,seperate,target_col,new_col):
@@ -397,6 +408,14 @@ def plus(df,seperate,target_col,new_col):
         return df_plus       
        
 #Customer Segmentation udfs
+def last_day_of_month(date):
+        if date.month == 12:
+                return date.replace(day=31)
+        return date.replace(month=date.month+1, day=1) - datetime.timedelta(days=1)
+            
+def daterange(start_date,end_date):
+        for n in range(int ((end_date - start_date).days)):
+                 yield start_date + timedelta(n)
 
 def r_score(x):
     if x <= quintiles['Recency'][.2]:
@@ -423,7 +442,65 @@ def fm_score(x,c):
         return 5    
        
        
-       
+def ExplicitMapping(dataframe):
+	GLEntry = dataframe
+	GLEntry = GLEntry.withColumn("Link_SUBBU",when((GLEntry["Link_SUBBU"]>=400) & (GLEntry["Link_SUBBU"]<=499)
+                                                   , when(GLEntry["Link_SBU"]==1601, lit(415))\
+                                                     .when(GLEntry["Link_SBU"]==1602, lit(425))\
+                                                     .when(GLEntry["Link_SBU"]==1603, lit(420))\
+                                                     .when(GLEntry["Link_SBU"]==1604, lit(445))\
+                                                     .when(GLEntry["Link_SBU"]==1605, lit(430))\
+                                                     .when(GLEntry["Link_SBU"]==1607, lit(495))\
+                                                     .when(GLEntry["Link_SBU"]==1609, lit(486))\
+                                                     .when(GLEntry["Link_SBU"]==1611, lit(487))\
+                                                     .when(GLEntry["Link_SBU"]==1612, lit(488))\
+                                                     .when(GLEntry["Link_SBU"]==1613, lit(489))\
+                                                     .when(GLEntry["Link_SBU"]==1610, lit(435))\
+                                                     .when(GLEntry["Link_SBU"]==1615, lit(440))\
+                                                     .when(GLEntry["Link_SBU"]==1620, lit(490))\
+                                                     .when(GLEntry["Link_SBU"]==1625, lit(485))\
+                                                     .when(GLEntry["Link_SBU"].isin([4551,4560,4670,4680,4799]), lit(455))\
+                                                     .when(GLEntry["Link_SBU"].isin([1630]), lit(405))\
+                                                     .when((GLEntry["Link_SBU"]>=4250) & (GLEntry["Link_SBU"]<=4499), lit(465))\
+                                                     .when((GLEntry["Link_SBU"]>=8000) & (GLEntry["Link_SBU"]<=8100), lit(475))\
+                                                     .otherwise(lit(490)))\
+                                                .when((GLEntry["Link_SUBBU"]>=500) & (GLEntry["Link_SUBBU"]<=599),lit(510))\
+                                                .when((GLEntry["Link_SUBBU"]>=10) & (GLEntry["Link_SUBBU"]<=99)
+                                                      , when(GLEntry["Link_TARGETPROD"]==70, lit(20))\
+                                                      .when(GLEntry["Link_TARGETPROD"].isin([90,95]), lit(30))\
+                                                      .when(GLEntry["Link_TARGETPROD"]==100, lit(25))\
+                                                      .when(GLEntry["Link_TARGETPROD"]==140, lit(35))\
+                                                      .when(GLEntry["Link_TARGETPROD"]==30, lit(40))\
+                                                      .when(GLEntry["Link_TARGETPROD"]==25, lit(45))\
+                                                      .when(GLEntry["Link_TARGETPROD"]==40, lit(50))\
+                                                      .when(GLEntry["Link_TARGETPROD"].isin([170]), lit(55))\
+                                                      .when(GLEntry["Link_TARGETPROD"]==80, lit(60))\
+                                                      .when(GLEntry["Link_TARGETPROD"].isin([15,20,35,45,50,55,60,75,98,110,120,130,141,145,146,175]), lit(65))\
+                                                      .otherwise(lit(96)))\
+                                                .when((GLEntry["Link_SUBBU"]>=101) & (GLEntry["Link_SUBBU"]<=200)
+                                                      , when(GLEntry["Link_TARGETPROD"].isin([15,60,98,110,120,130,141,145]), lit(110))\
+                                                      .when(GLEntry["Link_TARGETPROD"].isin([10,35,45]), lit(105))\
+                                                      .when(GLEntry["Link_TARGETPROD"].isin([20,135]), lit(115))\
+                                                      .when((GLEntry["Link_SBU"]>=4551) & (GLEntry["Link_SBU"]<=4799), lit(130))\
+                                                      .otherwise(lit(120)))\
+                                                .when((GLEntry["Link_SUBBU"]>=300) & (GLEntry["Link_SUBBU"]<=399)
+                                                    , when(GLEntry["Link_SBU"]==710, GLEntry["Link_SUBBU"])\
+                                                    .when(GLEntry["Link_SBU"]==520, lit(315))\
+                                                    .when(GLEntry["Link_SBU"]==530, lit(320))\
+                                                    .when(GLEntry["Link_SBU"]==545, lit(325))\
+                                                    .when(GLEntry["Link_SBU"]==550, lit(330))\
+                                                    .when(GLEntry["Link_SBU"]==555, lit(335))\
+                                                    .when(GLEntry["Link_SBU"]==560, lit(340))\
+                                                    .when(GLEntry["Link_SBU"]==510, lit(345))\
+                                                    .when(GLEntry["Link_SBU"]==630, lit(350))\
+                                                    .when(GLEntry["Link_SBU"].isin([601,610,615,625,635,640,641,642,643,645,650]), lit(350))\
+                                                    .when(GLEntry["Link_SBU"]==565, lit(360))\
+                                                    .when(GLEntry["Link_SUBBU"]==365, lit(365))\
+                                                    .when(GLEntry["Link_SUBBU"]==316, lit(316))\
+                                                    .otherwise(lit(305)))\
+                                                .otherwise(GLEntry["Link_SUBBU"]))
+	dataframe = GLEntry.withColumn('Link_SUBBU',when(GLEntry['Link_SUBBU']==310, lit(305)).otherwise(GLEntry["Link_SUBBU"]))
+	return dataframe      
        
 
     

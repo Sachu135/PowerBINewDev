@@ -10,9 +10,9 @@ from datetime import date
 
 st = dt.datetime.now()
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
@@ -27,13 +27,13 @@ STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/C
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
-conf = SparkConf().setMaster("local[*]").setAppName("Sales").\
+conf = SparkConf().setMaster("local[16]").setAppName("Sales").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
                     set("spark.driver.memory","30g").\
                     set("spark.executor.memory","30g").\
-                    set("spark.driver.cores",'*').\
+                    set("spark.driver.cores",16).\
                     set("spark.driver.maxResultSize","0").\
                     set("spark.sql.debug.maxToStringFields", "1000").\
                     set("spark.executor.instances", "20").\
@@ -109,7 +109,6 @@ for dbe in config["DbEntities"]:
                          .withColumn("LinkValueEntry",concat_ws('|',SCML.DocumentNo_.cast('string'),SCML.LineNo_.cast('string'),to_date(SCML.PostingDate).cast('string')))\
                          .withColumnRenamed('No_','Item_No').withColumnRenamed('PostingDate','SCML_PostingDate')
             SCML = SCML.filter(SCML['Type']!=4).filter(SCML['Quantity']!=0)
-            SCML = SCML.withColumn("Quantity",SCML['Quantity']*(-1))
             SCML_DE = SCML
             SCML = SCML.filter(SCML['SCML_PostingDate']>=UIStartDate)
             GPS = spark.read.format("parquet").load(STAGE1_PATH+"/General Posting Setup")

@@ -12,9 +12,9 @@ from os.path import dirname, join, abspath
 import datetime as dt
 st = dt.datetime.now()
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
@@ -28,13 +28,13 @@ entityLocation = DBName+EntityName
 STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[*]").setAppName("Payables_Snapshot").\
+conf = SparkConf().setMaster("local[16]").setAppName("Payables_Snapshot").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
                     set("spark.driver.memory","30g").\
                     set("spark.executor.memory","30g").\
-                    set("spark.driver.cores",'*').\
+                    set("spark.driver.cores",16).\
                     set("spark.driver.maxResultSize","0").\
                     set("spark.sql.debug.maxToStringFields", "1000").\
                     set("spark.executor.instances", "20").\

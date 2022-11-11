@@ -21,13 +21,13 @@ DB0 = DB0[1]
 owmode = 'overwrite'
 apmode = 'append'                           
 st = dt.datetime.now()
-conf = SparkConf().setMaster("local[*]").setAppName("SUBBU_Dimension").\
+conf = SparkConf().setMaster("local[16]").setAppName("SUBBU_Dimension").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
                     set("spark.driver.memory","30g").\
                     set("spark.executor.memory","30g").\
-                    set("spark.driver.cores",'*').\
+                    set("spark.driver.cores",16).\
                     set("spark.driver.maxResultSize","0").\
                     set("spark.sql.debug.maxToStringFields", "1000").\
                     set("spark.executor.instances", "20").\
