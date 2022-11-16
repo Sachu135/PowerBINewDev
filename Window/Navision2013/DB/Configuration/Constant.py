@@ -5,8 +5,6 @@ MnSt = 4
 yr = 3
 owmode = 'overwrite'
 apmode = 'append'
-HDFS_PATH = "hdfs://master:9000"
-SPARK_MASTER = "spark://"+"#ConfiguratorDbInfo_ServerIP"+":7077"
 class PostgresDbInfo:
     Host = "#PostgresDbInfo_Host"      
     Port = "#PostgresDbInfo_Port"   
@@ -22,7 +20,7 @@ class ConfiguratorDbInfo:
     PostgresDB = "Configurator" 
     Schema = "#ConfiguratorDbInfo_Schema"              
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
-	props = {"user":"#PostgresDbInfo_User", "password":"#PostgresDbInfo_Password", "driver": "org.postgresql.Driver"}
+	props = {"user":"#ConfiguratorDbInfo_User", "password":"#ConfiguratorDbInfo_User", "driver": "org.postgresql.Driver"}
 class ConnectionInfo:
     JDBC_PARAM = "jdbc"
     SQL_SERVER_DRIVER = "com.microsoft.sqlserver.jdbc.SQLServerDriver"
