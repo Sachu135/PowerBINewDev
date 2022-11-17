@@ -15,36 +15,38 @@ from datetime import datetime
 from distutils.command.check import check
 st = dt.datetime.now()
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf as Kockpit
-
 Filepath = os.path.dirname(os.path.abspath(__file__))
 FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
 entityLocation = DBName+EntityName
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
-STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
-STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
+STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
+STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
+STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("BalanceSheet")\
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
         .set("spark.kryoserializer.buffer.max","512m")\
         .set("spark.cores.max","24")\
         .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","24g")\
+        .set("spark.driver.memory","30g")\
+        .set("spark.driver.maxResultSize","0")\
+        .set("spark.sql.debug.maxToStringFields","500")\
         .set("spark.driver.maxResultSize","20g")\
         .set("spark.memory.offHeap.enabled",'true')\
         .set("spark.memory.offHeap.size","100g")\
         .set('spark.scheduler.mode', 'FAIR')\
         .set("spark.sql.broadcastTimeout", "36000")\
         .set("spark.network.timeout", 10000000)\
+        .set("spark.sql.codegen.wholeStage","false")\
         .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
         .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
         .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
@@ -71,14 +73,12 @@ for dbe in config["DbEntities"]:
             Company= spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblCompanyName")
             GL_Entry_Table= spark.read.format("delta").load(STAGE1_PATH+"/G_L Entry")
             GL_Account_Table = spark.read.format("delta").load(STAGE1_PATH+"/G_L Account")  
-            FlagChecker= spark.read.format("delta").load(STAGE1_Configurator_Path+"/Conditional Mapping")            
             VLE = VLE.select('VendorNo_','DocumentNo_')
-            CLE = CLE.select('CustomerNo_','DocumentNo_')
-            FlagChecker = FlagChecker.filter(FlagChecker['Particulars']=='BalanceSheet')        
+            CLE = CLE.select('CustomerNo_','DocumentNo_')     
             Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
             Company = Company.select("StartDate","EndDate")
             Calendar_StartDate = Company.select('StartDate').rdd.flatMap(lambda x: x).collect()[0]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%m/%d/%Y").date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
             
             if datetime.date.today().month>int(MnSt)-1:
                 UIStartYr=datetime.date.today().year-int(yr)+1
@@ -88,8 +88,8 @@ for dbe in config["DbEntities"]:
             UIStartDate=max(Calendar_StartDate,UIStartDate)
             
             Calendar_EndDate_conf=Company.select(Company.EndDate).collect()[0]["EndDate"]
-            Calendar_EndDate_conf = Calendar_EndDate_conf.split("/")
-            Calendar_EndDate_conf = datetime.date(int(Calendar_EndDate_conf[2]),int(Calendar_EndDate_conf[0]),int(Calendar_EndDate_conf[1]))
+            Calendar_EndDate_conf = Calendar_EndDate_conf.split("-")
+            Calendar_EndDate_conf = datetime.date(int(Calendar_EndDate_conf[0]),int(Calendar_EndDate_conf[1]),int(Calendar_EndDate_conf[2]))
            
             cdate = cdate.split("-")
             cdate = datetime.date(int(cdate[0]),int(cdate[1]),int(cdate[2]))
@@ -207,14 +207,11 @@ for dbe in config["DbEntities"]:
                                                ,'LinkDate','Document_No','GL_Description','Amount'
                                                ,'SourceCode','DebitAmount','CreditAmount','Income_Balance','GLAccount')
             GLEntry_Temp= CONCATENATE(GL_Acc_Entry2,GLEntry_Temp, spark)
-            logic_two = FlagChecker.filter(FlagChecker['Type']==2)
             GL_Two = GLEntry_Temp.withColumn('Year_X',year('PostingDate'))
             GL_Two = GL_Two.withColumn('Month_X',month('PostingDate'))
             GL_Two = GL_Two.withColumn('YMX',concat_ws('_','Year_X','Month_X'))
             GL_Two = GL_Two.withColumn('Key',concat_ws('_','Document_No','YMX'))
             GL_Two_Cust = GL_Two.select('Document_No','YMX','Amount')
-            logic_two_cust = logic_two.filter(logic_two['Cluster'] == 'Customer')
-            FlagChecker_Gls = [int(i.GLAccount) for i in logic_two_cust.select('GLAccount').distinct().collect()]
             cond = [GL_Two.Document_No == CLE.DocumentNo_]
             GL_Two_Cust = GL_Two_Cust.join(CLE , cond, how = 'left')
             GL_Two_Cust = GL_Two_Cust.groupBy('CustomerNo_','YMX').agg({'Amount':'sum'}).withColumnRenamed('sum(Amount)','Amount')
@@ -225,14 +222,7 @@ for dbe in config["DbEntities"]:
             GL_Two_Cust = GL_Two_Cust.where(col("DocumentNo_").isNotNull())
             GL_Two_Cust = GL_Two_Cust.select('Key','Flag_Cust')
             GL_Two = GL_Two.join(GL_Two_Cust,'Key',how = 'left')
-            GL_Two = GL_Two.withColumn('GLAccount',when(GL_Two['GLAccount'].isin(FlagChecker_Gls),
-                                                                    when(GL_Two['FLag_Cust'] == '1', concat(GL_Two['GLAccount'],lit("000")))\
-                                                                    .otherwise(GL_Two['GLAccount']))\
-                                                                .otherwise(GL_Two['GLAccount']))
-            
             GL_Two_Ven = GL_Two.select('Document_No','YMX','Amount')
-            logic_two_cust = logic_two.filter(logic_two['Cluster'] == 'Vendor')
-            FlagChecker_Gls = [int(i.GLAccount) for i in logic_two_cust.select('GLAccount').distinct().collect()]
             cond = [GL_Two.Document_No == VLE.DocumentNo_]
             GL_Two_Ven = GL_Two_Ven.join(VLE , cond, how = 'left')
            
@@ -245,16 +235,8 @@ for dbe in config["DbEntities"]:
             GL_Two_Ven = GL_Two_Ven.where(col("DocumentNo_").isNotNull())
             GL_Two_Ven = GL_Two_Ven.select('Key','Flag_Ven')
             GL_Two = GL_Two.join(GL_Two_Ven,'Key',how = 'left')
-            GL_Two = GL_Two.withColumn('GLAccount',when(GL_Two['GLAccount'].isin(FlagChecker_Gls),
-                                                                    when(GL_Two['FLag_Ven'] == '1', concat(GL_Two['GLAccount'],lit("000")))\
-                                                                    .otherwise(GL_Two['GLAccount']))\
-                                                                .otherwise(GL_Two['GLAccount']))
-            
-            
             GLEntry_Temp = GL_Two.select('PostingDate','Amount','SourceCode','GLAccount')
             GLEntry_Temp=GLEntry_Temp.groupBy('PostingDate','GLAccount').agg({'Amount':'sum'}).withColumnRenamed('sum(Amount)','Amount')
-           
-            
             data =[]
             for single_date in Kockpit.daterange(UIStartDate, Calendar_EndDate):
                 data.append({'Link_date':single_date})
@@ -272,34 +254,7 @@ for dbe in config["DbEntities"]:
             spark.conf.set("spark.sql.crossJoin.enabled", 'true')
             GLEntry_Temp = GLEntry_Temp.join(records).select('PostingDate','Amount','GLAccount','Link_date')
             GLEntry_Temp=GLEntry_Temp.filter(GLEntry_Temp['Link_date']>= GLEntry_Temp['PostingDate'])
-            GLEntry_Temp=GLEntry_Temp.groupBy('Link_date','GLAccount').agg({'Amount':'sum'}).withColumnRenamed('sum(Amount)','Amount')
-            logic_one = FlagChecker.filter(FlagChecker['Type']==1)
-            FlagChecker_Gls = [int(i.GLAccount) for i in logic_one.select('GLAccount').distinct().collect()]
-            GLEntry_Temp = GLEntry_Temp.withColumn('GLAccount',when(GLEntry_Temp['GLAccount'].isin(FlagChecker_Gls),
-                                                                    when(GLEntry_Temp['Amount']<0, concat(GLEntry_Temp['GLAccount'],lit("000")))\
-                                                                    .otherwise(GLEntry_Temp['GLAccount']))\
-                                                                    .otherwise(GLEntry_Temp['GLAccount']))
-            GLEntry_Temp.cache()
-            GLEntry_Temp.count()
-            logic_three = FlagChecker.filter(FlagChecker['Type']==3)
-            Flag_Cluster = logic_three.select('Cluster').distinct().collect()
-            for k in range(0,len(Flag_Cluster)):
-                logic_three_k = logic_three.filter(logic_three['Cluster'] == Flag_Cluster[k]['Cluster'])
-                FlagChecker_Gls = [int(i.GLAccount) for i in logic_three_k.select('GLAccount').distinct().collect()]
-                GLEntry_Temp_not = GLEntry_Temp.filter(GLEntry_Temp['GLAccount'].isin(FlagChecker_Gls))
-                GLEntry_Temp = GLEntry_Temp.filter(~GLEntry_Temp['GLAccount'].isin(FlagChecker_Gls))
-                GLEntry_Temp_not_neg = GLEntry_Temp_not.groupBy('Link_date').agg({'Amount':'sum'}).withColumnRenamed('sum(Amount)','Amount')
-                GLEntry_Temp_not_neg = GLEntry_Temp_not_neg.filter(GLEntry_Temp_not_neg['Amount'] < 0)
-                GLEntry_Temp_not_neg = GLEntry_Temp_not_neg.withColumn('check', lit('a'))
-                GLEntry_Temp_not_neg = GLEntry_Temp_not_neg.select('Link_date','check')
-                GLEntry_Temp_not = GLEntry_Temp_not.join(GLEntry_Temp_not_neg, 'Link_date', how = 'left')
-        
-                GLEntry_Temp_not = GLEntry_Temp_not.withColumn('GLAccount',when(GLEntry_Temp_not['check'] == 'a',\
-                                                                                concat(GLEntry_Temp_not['GLAccount'],lit("000")))
-                                                                    .otherwise(GLEntry_Temp_not['GLAccount']))
-                GLEntry_Temp_not = GLEntry_Temp_not.select('Link_date','GLAccount','Amount')
-                GLEntry_Temp = GLEntry_Temp.unionByName(GLEntry_Temp_not)
-                
+            GLEntry_Temp=GLEntry_Temp.groupBy('Link_date','GLAccount').agg({'Amount':'sum'}).withColumnRenamed('sum(Amount)','Amount')   
             GLEntry_Temp=GLEntry_Temp.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
             GLEntry_Temp = GLEntry_Temp.withColumn('DBName',lit(DBName))\
                                     .withColumn('EntityName',lit(EntityName))\
@@ -342,5 +297,3 @@ for dbe in config["DbEntities"]:
             log_df = spark.createDataFrame(log_dict, logger.getSchema())
             log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
 print('finance_BalanceSheet completed: ' + str((dt.datetime.now()-st).total_seconds()))
-
-

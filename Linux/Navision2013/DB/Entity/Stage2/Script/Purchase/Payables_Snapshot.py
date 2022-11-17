@@ -12,9 +12,9 @@ from os.path import dirname, join, abspath
 import datetime as dt
 st = dt.datetime.now()
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
@@ -25,21 +25,24 @@ DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
 entityLocation = DBName+EntityName
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
-STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
-STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
+STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
+STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
+STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("Payables_Snapshot")\
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
         .set("spark.kryoserializer.buffer.max","512m")\
         .set("spark.cores.max","24")\
         .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","24g")\
+        .set("spark.driver.memory","30g")\
+        .set("spark.driver.maxResultSize","0")\
+        .set("spark.sql.debug.maxToStringFields","500")\
         .set("spark.driver.maxResultSize","20g")\
         .set("spark.memory.offHeap.enabled",'true')\
         .set("spark.memory.offHeap.size","100g")\
         .set('spark.scheduler.mode', 'FAIR')\
         .set("spark.sql.broadcastTimeout", "36000")\
         .set("spark.network.timeout", 10000000)\
+        .set("spark.sql.codegen.wholeStage","false")\
         .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
         .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
         .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
@@ -54,7 +57,7 @@ spark = sqlCtx.sparkSession
 import delta
 from delta.tables import *
 fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
-cdate = datetime.datetime.now().strftime('%d-%m-%Y')
+cdate = datetime.datetime.now().strftime('%Y-%m-%d')
 for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
         CompanyName=dbe['Name']
@@ -65,7 +68,7 @@ for dbe in config["DbEntities"]:
             Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
             df = Company.select("StartDate","EndDate")
             Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%m/%d/%Y").date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
            
             if datetime.date.today().month>int(MnSt)-1:
                     UIStartYr=datetime.date.today().year-int(yr)+1
@@ -89,7 +92,7 @@ for dbe in config["DbEntities"]:
                  .withColumnRenamed("PostingDate","VLE_Posting_Date").withColumnRenamed("PostingDate","LinkDate")
             
             vle = vle.join(pih,vle["VLE_Document_No"]==pih["PIH_No"],'left')
-            current_month = datetime.datetime.strptime(cdate,"%d-%m-%Y")
+            current_month = datetime.datetime.strptime(cdate,"%Y-%m-%d")
             current_month = str(current_month.year)+str(current_month.month)
             dvle = DVLE.filter(year(col("PostingDate"))!='1753')
             dvle = dvle.withColumn('AmountLCY',dvle['AmountLCY'].cast('decimal(20,4)'))
@@ -101,11 +104,13 @@ for dbe in config["DbEntities"]:
             dvle = dvle.withColumnRenamed("VendorLedgerEntryNo_","DVVLE_No").withColumnRenamed("DocumentNo_","DVLE_Document_No")
             
             dvle = dvle.withColumn("DVLE_Monthend_Posting_Date",when(dvle.link_month==current_month, cdate).otherwise(last_day(dvle.PostingDate)))
-            dvle = dvle.drop('link_month').drop('DocumentDate')
+            dvle = dvle.drop('link_month').drop('DocumentDate','CurrencyCode')
             cond = [vle.VLE_No==dvle.DVVLE_No]
             df = RJOIN(vle,dvle,cond)
             df1 = VPG.withColumnRenamed("Code","Vendor_Posting_Group").withColumnRenamed("PayablesAccount","GLAccount")
+           
             cond = [df.Vendor_Posting_Group == df1.Vendor_Posting_Group]
+           
             df2 = LJOIN(df,df1,cond)
             GLRange=spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblGLAccountMapping")
             GLRange = GLRange.filter(GLRange['DBName'] == DBName ).filter(col('EntityName') == EntityName).filter(GLRange['GLRangeCategory']== 'Vendor')
@@ -140,7 +145,7 @@ for dbe in config["DbEntities"]:
                                     .withColumnRenamed('max(Max_Monthend)','Max_Monthend')
             df = Company.select("StartDate","EndDate")
             Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%m/%d/%Y").date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
             if datetime.date.today().month>int(MnSt)-1:
                 UIStartYr=datetime.date.today().year-int(yr)+1
             else:
@@ -148,8 +153,8 @@ for dbe in config["DbEntities"]:
             UIStartDate=datetime.date(UIStartYr,int(MnSt),1)
             
             Calendar_EndDate_conf=df.select(df.EndDate).collect()[0]["EndDate"]
-            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%m/%d/%Y").date()
-            Calendar_EndDate_file=datetime.datetime.strptime(cdate,"%d-%m-%Y").date()
+            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%Y-%m-%d").date()
+            Calendar_EndDate_file=datetime.datetime.strptime(cdate,"%Y-%m-%d").date()
             Calendar_EndDate=min(Calendar_EndDate_conf,Calendar_EndDate_file)
             def last_day_of_month(date):
                     if date.month == 12:
@@ -177,7 +182,7 @@ for dbe in config["DbEntities"]:
             sqldf=sqldf.filter(sqldf['Link_date']<= sqldf['Max_MonthEnd']).filter(sqldf['Link_date']>= sqldf['Min_MonthEnd']).select('TempVLE_No','VLE_Document_No','Link_date').withColumnRenamed('Link_date','DVLE_MonthEnd')
             VLE_DVLE_Joined = df2.select('DimSetID','VLE_No','DVLE_Posting_Date','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType','Remaining_Amount','Original_Amount')
             cond = [sqldf.TempVLE_No == VLE_DVLE_Joined.VLE_No]
-            APsnapshots = LJOIN(sqldf,VLE_DVLE_Joined,cond)# no yeear Month
+            APsnapshots = LJOIN(sqldf,VLE_DVLE_Joined,cond)
             APsnapshots=APsnapshots.select('DimSetID','TempVLE_No','DVLE_Posting_Date','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType','Remaining_Amount','Original_Amount','VLE_Document_No','DVLE_MonthEnd').filter(APsnapshots['DVLE_Posting_Date']<= APsnapshots['DVLE_MonthEnd'])
             APsnapshots = APsnapshots.groupBy('DimSetID','TempVLE_No','VLE_Document_No','DVLE_MonthEnd','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType').agg({'Remaining_Amount':'sum','Original_Amount':'sum'}).withColumnRenamed('sum(Remaining_Amount)','Remaining_Amount').withColumnRenamed('sum(Original_Amount)','Original_Amount')
             VLE_DVLE_Joined = df2.select('VLE_No','LinkVendor','VLE_Posting_Date','LinkPurchaser').distinct()
@@ -210,10 +215,10 @@ for dbe in config["DbEntities"]:
             APsnapshots=APsnapshots.withColumn('BucketName',when(APsnapshots.NOD_AP_Posting_Date<=(MaxLimit),lit("Not Due")).otherwise(APsnapshots.BucketName))\
                         .withColumn('Nod',when(APsnapshots.NOD_AP_Posting_Date<=(MaxLimit), APsnapshots.NOD_AP_Posting_Date).otherwise(APsnapshots.Nod)) 
             APsnapshots = APsnapshots.withColumnRenamed('DimSetID','DimensionSetID')
-            
             finalDF = APsnapshots.join(DSE,"DimensionSetID",'left')
             finalDF = RenameDuplicateColumns(finalDF)
             finalDF.cache()
+            print(finalDF.count())
             finalDF .coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Payables_Snapshot")
             logger.endExecution()
             
@@ -230,15 +235,12 @@ for dbe in config["DbEntities"]:
             print("type - "+str(exc_type))
             print("File - "+exc_traceback.tb_frame.f_code.co_filename)
             print("Error Line No. - "+str(exc_traceback.tb_lineno))
-        
             logger.endExecution()
-        
             try:
                 IDEorBatch = sys.argv[1]
             except Exception as e :
                 IDEorBatch = "IDLE"
             os.system("spark-submit "+Kockpit_Path+"/Email.py 1 Payables_Snapshot '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+" ")
-            
             log_dict = logger.getErrorLoggedRecord('Purchase.Payables_Snapshot', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
             log_df = spark.createDataFrame(log_dict, logger.getSchema())
             log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)

@@ -9,6 +9,7 @@ import time,sys,calendar
 from pyspark.sql.types import *
 from builtins import str
 import traceback
+import re
 import os
 from os.path import dirname, join, abspath
 from distutils.command.check import check
@@ -17,10 +18,9 @@ import datetime as dt
 st = dt.datetime.now()
 from os.path import dirname, join, abspath
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
-Stage2_Path =abspath(join(join(dirname(__file__), '..'),'..','..','Stage2','ParquetData','Inventory'))
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
@@ -32,22 +32,24 @@ EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
 entityLocation = DBName+EntityName
 today = datetime.date.today().strftime("%Y-%m-%d")
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
-STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
-STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
+STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
+STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
+STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("StockAgeing")\
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
         .set("spark.kryoserializer.buffer.max","512m")\
         .set("spark.cores.max","24")\
         .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","24g")\
+        .set("spark.driver.memory","30g")\
+        .set("spark.driver.maxResultSize","0")\
+        .set("spark.sql.debug.maxToStringFields","500")\
         .set("spark.driver.maxResultSize","20g")\
         .set("spark.memory.offHeap.enabled",'true')\
-        .set("spark.default.parallelism","100")\
         .set("spark.memory.offHeap.size","100g")\
         .set('spark.scheduler.mode', 'FAIR')\
         .set("spark.sql.broadcastTimeout", "36000")\
         .set("spark.network.timeout", 10000000)\
+        .set("spark.sql.codegen.wholeStage","false")\
         .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
         .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
         .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
@@ -133,7 +135,7 @@ for dbe in config["DbEntities"]:
             Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
             df = Company.select("StartDate","EndDate")
             Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%m/%d/%Y").date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
             
             if datetime.date.today().month>int(MnSt)-1:
                     UIStartYr=datetime.date.today().year-int(yr)+1
@@ -143,7 +145,7 @@ for dbe in config["DbEntities"]:
             UIStartDate=max(Calendar_StartDate,UIStartDate)
             
             Calendar_EndDate_conf=df.select(df.EndDate).collect()[0]["EndDate"]
-            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%m/%d/%Y").date()
+            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%Y-%m-%d").date()
             Calendar_EndDate_file=datetime.datetime.strptime(cdate,"%Y-%m-%d").date()
             Calendar_EndDate=min(Calendar_EndDate_conf,Calendar_EndDate_file)
             days = (Calendar_EndDate-UIStartDate).days
@@ -160,7 +162,8 @@ for dbe in config["DbEntities"]:
             records=records.withColumn("RollupMonth", \
                           when(records["RollupMonth"] ==    Kockpit.last_day_of_month(Calendar_EndDate_file), Calendar_EndDate_file).otherwise(records["RollupMonth"]))
             
-            records.persist(StorageLevel.MEMORY_AND_DISK)
+            records.cache()
+            print(records.count())
             ItemInv5=ItemInv3.join(records).where(records.RollupMonth>=ItemInv3.Monthend)
             ItemInv5 = ItemInv5.select("LinkItem","LocationCode","SBU_Code","BU_Code","RefNo","InDate","RollupMonth","StockQuantity","StockValue")
             ItemInv5 = RENAME(ItemInv5,{"LocationCode":"LinkLocation","RefNo":"RefILENo"})
@@ -174,7 +177,8 @@ for dbe in config["DbEntities"]:
                         .withColumn("StockAge",datediff(ItemInv7.Monthend,ItemInv7.InDate))\
                         .withColumn("TransactionType",lit("StockAgeing")).drop('Monthend')
             ItemInv7=ItemInv7.na.fill({'StockAge':0})
-            ItemInv7.persist(StorageLevel.MEMORY_AND_DISK)
+            ItemInv7.cache()
+            print(ItemInv7.count())
             Bucket = spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblInventoryBucket")
             Maxoflt = Bucket.filter(Bucket['BucketName']=='<')
             MaxLimit = int(Maxoflt.select('UpperLimit').first()[0])

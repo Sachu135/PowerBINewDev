@@ -7,9 +7,9 @@ import os,sys
 from os.path import dirname, join, abspath
 st = dt.datetime.now()
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
@@ -21,20 +21,23 @@ DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
 entityLocation = DBName+EntityName
-STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
-STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
+STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
+STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("PurchaseCRMemo")\
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
         .set("spark.kryoserializer.buffer.max","512m")\
         .set("spark.cores.max","24")\
         .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","24g")\
+        .set("spark.driver.memory","30g")\
+        .set("spark.driver.maxResultSize","0")\
+        .set("spark.sql.debug.maxToStringFields","500")\
         .set("spark.driver.maxResultSize","20g")\
         .set("spark.memory.offHeap.enabled",'true')\
         .set("spark.memory.offHeap.size","100g")\
         .set('spark.scheduler.mode', 'FAIR')\
         .set("spark.sql.broadcastTimeout", "36000")\
         .set("spark.network.timeout", 10000000)\
+        .set("spark.sql.codegen.wholeStage","false")\
         .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
         .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
         .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
@@ -55,8 +58,8 @@ for dbe in config["DbEntities"]:
         try:
             
             logger = Logger()
-            pcml = spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Cr_ Memo Line").drop('DBName','EntityName','YearMonth','locationcode','PostingDate')
-            pcmh = spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Cr_ Memo Hdr_").drop('YearMonth')
+            pcml = spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Cr_ Memo Line").select('Amount','AmountIncludingTax','Buy-fromVendorNo_','Description','DimensionSetID','DocumentNo_','ExpectedReceiptDate','LineNo_','Quantity','UnitCost','VariantCode')
+            pcmh = spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Cr_ Memo Hdr_").select('PaymentTermsCode','DueDate','PostingDate','Pay-toVendorNo_','PurchaserCode','Applies-toDoc_No_','Applies-toDoc_Type','No_')
             pcmh =pcmh.withColumnRenamed("No_","Purchase_No")
             cond = [pcml.DocumentNo_ == pcmh.Purchase_No]
             Purchase = Kockpit.LJOIN(pcml,pcmh,cond)

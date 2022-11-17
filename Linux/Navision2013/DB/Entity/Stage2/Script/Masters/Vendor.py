@@ -7,12 +7,11 @@ import os,sys
 from os.path import dirname, join, abspath
 import datetime as dt 
 from builtins import str
-
 st = dt.datetime.now()
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
@@ -22,21 +21,24 @@ FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
-STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
-STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
+STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
+STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
+STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("Vendor")\
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
         .set("spark.kryoserializer.buffer.max","512m")\
         .set("spark.cores.max","24")\
         .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","24g")\
+        .set("spark.driver.memory","30g")\
+        .set("spark.driver.maxResultSize","0")\
+        .set("spark.sql.debug.maxToStringFields","500")\
         .set("spark.driver.maxResultSize","20g")\
         .set("spark.memory.offHeap.enabled",'true')\
         .set("spark.memory.offHeap.size","100g")\
         .set('spark.scheduler.mode', 'FAIR')\
         .set("spark.sql.broadcastTimeout", "36000")\
         .set("spark.network.timeout", 10000000)\
+        .set("spark.sql.codegen.wholeStage","false")\
         .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
         .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
         .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
@@ -54,14 +56,12 @@ for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
         CompanyName=dbe['Name']
         CompanyName=CompanyName.replace(" ","")
-        try:
-            columns=Kockpit.TableRename("Vendor")         
+        try:        
             logger = Logger()
-          
             finalDF=spark.read.format("delta").load(STAGE1_PATH+"/Vendor" )
+            finalDF = RENAME(finalDF,{"No_":"Link Vendor","Name2":"Vendor Name","City":"Vendor City","Vendor Posting Group":"Vendor Posting Group New","Post Code":"Vendor Post Code","StateCode":"Vendor State Code"})
             finalDF=finalDF.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))   
-            finalDF = finalDF.withColumn('Link Vendor Key',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["No_"]))
-            finalDF = RENAME(finalDF,columns)       
+            finalDF = finalDF.withColumn('Link Vendor Key',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["Link Vendor"]))    
             result_df = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])
             result_df = result_df.select([F.col(col).alias(col.replace("(","")) for col in result_df.columns])
             result_df = result_df.select([F.col(col).alias(col.replace(")","")) for col in result_df.columns])

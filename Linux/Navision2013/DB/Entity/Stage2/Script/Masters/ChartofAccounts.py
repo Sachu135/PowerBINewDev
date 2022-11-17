@@ -10,9 +10,9 @@ import pandas as pd
 from builtins import str
 st = dt.datetime.now()
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
-DB1_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 sys.path.insert(0,'../../')
-sys.path.insert(0, DB1_path)
+sys.path.insert(0, DB_path)
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
@@ -22,21 +22,24 @@ FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
-STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
-STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
+STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
+STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
+STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("ChartofAccounts")\
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
         .set("spark.kryoserializer.buffer.max","512m")\
         .set("spark.cores.max","24")\
         .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","24g")\
+        .set("spark.driver.memory","30g")\
+        .set("spark.driver.maxResultSize","0")\
+        .set("spark.sql.debug.maxToStringFields","500")\
         .set("spark.driver.maxResultSize","20g")\
         .set("spark.memory.offHeap.enabled",'true')\
         .set("spark.memory.offHeap.size","100g")\
         .set('spark.scheduler.mode', 'FAIR')\
         .set("spark.sql.broadcastTimeout", "36000")\
         .set("spark.network.timeout", 10000000)\
+        .set("spark.sql.codegen.wholeStage","false")\
         .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
         .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
         .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
@@ -59,17 +62,6 @@ for dbe in config["DbEntities"]:
             GLAccount=spark.read.format("delta").load(STAGE1_PATH+"/G_L Account" )
             GLAccount=GLAccount.select("No_","Name","AccountType","Income_Balance","Indentation","Totaling")
             GLAccount=GLAccount.filter(GLAccount["No_"]!='SERVER')
-            FlagChecker =spark.read.format("delta").load(STAGE1_Configurator_Path+"/Conditional Mapping")
-            FlagChecker = FlagChecker.withColumn('BSReportHeader',when(FlagChecker['Particulars'] == 'BalanceSheet',FlagChecker['AlternateMapping']))
-            FlagChecker = FlagChecker.withColumn('PLReportHeader',when(FlagChecker['Particulars'] == 'PL',FlagChecker['AlternateMapping']))
-            FlagChecker = FlagChecker.withColumn('BSReportFlag',when(FlagChecker['Particulars'] == 'BalanceSheet',lit('Y')).otherwise(lit('N')))
-            FlagChecker = FlagChecker.withColumn('PLReportFlag',when(FlagChecker['Particulars'] == 'PL',lit('Y')).otherwise(lit('N')))
-            FlagChecker = FlagChecker.withColumn('Income_Balance',when(FlagChecker['Particulars'] == 'BalanceSheet',lit(1)).otherwise(lit(0)))
-            FlagChecker = FlagChecker.withColumn('Level0',when(FlagChecker['Particulars'] == 'BalanceSheet',lit('Balance Sheet')).otherwise(lit('Profit and Loss Account')))
-            NegHead = FlagChecker.select('GLAccount','BSReportHeader','PLReportHeader','BSReportFlag','PLReportFlag','Income_Balance','Level0')
-            NegHead = NegHead.withColumn('DBName',lit(DBName))
-            NegHead = NegHead.withColumn('EntityName',lit(EntityName))
-            
             Inde = [i.Indentation for i in GLAccount.select('Indentation').collect()]
             Name = [i.Name for i in GLAccount.select('Name').collect()]
             Gl = [i.No_ for i in GLAccount.select('No_').collect()]
@@ -144,8 +136,7 @@ for dbe in config["DbEntities"]:
             Config_COA = COA_Table
             PL_Headers = COA_Table.select('GLAccountNo','PLReportHeader')\
                         .withColumnRenamed('GLAccountNo','GLAccount')
-            PL_Headers = PL_Headers.withColumn('PLReportHeader',when(PL_Headers['GLAccount']=='636200', lit('Other expenses'))\
-                        .otherwise(PL_Headers['PLReportHeader']))
+            
             PL_Headers = PL_Headers.filter(PL_Headers['PLReportHeader']!='')
             BS_Headers = COA_Table.select('GLAccountNo','BSReportHeader').filter(COA_Table['BSReportHeader']!='')\
                                 .withColumnRenamed('GLAccountNo','GLAccount')
@@ -192,7 +183,7 @@ for dbe in config["DbEntities"]:
                         data2.append({'PLFlag2':"PBT",'GLAccount2':n})
                     if(a == 'PAT' and GLRangeCat[i]['FromGL'] <= n <= GLRangeCat[i]['ToGL']):
                         data3.append({'PLFlag3':"PAT",'GLAccount3':n})
-                    
+                
             data1=spark.createDataFrame(data1)
             data2=spark.createDataFrame(data2)
             data3=spark.createDataFrame(data3)
@@ -207,12 +198,7 @@ for dbe in config["DbEntities"]:
             records = records.drop('GLAccountNo').drop('PLReportHeader').drop('BSReportHeader')
             records = records.join(PL_Headers,'GLAccount','left')
             records = records.join(BS_Headers,'GLAccount','left')    
-            record_level7 = records.select('GLAccount','Level7')
-            NegHead = NegHead.join(record_level7, 'GLAccount', how = 'left')
-            NegHead = NegHead.withColumn("Level7",concat_ws('_',NegHead['Level7'],lit("(Neg Header)")))
-            NegHead = NegHead.withColumn('GLAccount',concat(NegHead['GLAccount'],lit('000')))
-            NegHead = NegHead.withColumn('Link_GLAccount_Key',concat_ws('|',NegHead['DBName'],NegHead['EntityName'],NegHead['GLAccount']))
-            records = CONCATENATE(records,NegHead,spark)
+            record_level7 = records.select('GLAccount','Level'+str(max(Inde)))
             records = records.withColumn("Link_PLReportHeader" , concat(records['DBName'],lit("|"),records['EntityName'],lit("|"),records['PLReportHeader'])).drop( 'PLReportHeader')
             records.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/ChartofAccounts")
             
@@ -231,15 +217,12 @@ for dbe in config["DbEntities"]:
                 print("type - "+str(exc_type))
                 print("File - "+exc_traceback.tb_frame.f_code.co_filename)
                 print("Error Line No. - "+str(exc_traceback.tb_lineno))
-                
                 logger.endExecution()
-        
                 try:
                     IDEorBatch = sys.argv[1]
                 except Exception as e :
                     IDEorBatch = "IDLE"
                 os.system("spark-submit "+Kockpit_Path+"/Email.py 1 ChartofAccounts '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+"")
-            
                 log_dict = logger.getErrorLoggedRecord('COA', '', '', str(ex), exc_traceback.tb_lineno, IDEorBatch)
                 log_df = spark.createDataFrame(log_dict, logger.getSchema())
                 log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
