@@ -7,7 +7,7 @@ owmode = 'overwrite'
 apmode = 'append'
 HDFS_PATH = "hdfs://master:9000"
 DIR_PATH="#ConfiguratorInstallationDrive"
-SPARK_MASTER = "spark://"+"#ConfiguratorDbInfo_ServerIP"+":7077"
+SPARK_MASTER = "spark://#ConfiguratorDbInfo_ServerIP:7077"
 class PostgresDbInfo:
     Host = "#PostgresDbInfo_Host"      
     Port = "#PostgresDbInfo_Port"   
