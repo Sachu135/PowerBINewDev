@@ -53,7 +53,6 @@ conf = SparkConf().setMaster("local[16]").setAppName("CashFlow").\
 sc = SparkContext(conf = conf)
 sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
 cdate = datetime.datetime.now().strftime('%Y-%m-%d')
 for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
@@ -83,7 +82,7 @@ for dbe in config["DbEntities"]:
             
             Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
             Calendar_StartDate = Company.select('StartDate').rdd.flatMap(lambda x: x).collect()[0]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,'%m/%d/%Y').date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,'%Y-%m-%d').date()
             if datetime.date.today().month>int(MnSt)-1:
                 UIStartYr=datetime.date.today().year-int(yr)+1
             else:

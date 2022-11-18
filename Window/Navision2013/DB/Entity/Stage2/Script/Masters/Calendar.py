@@ -1,4 +1,3 @@
-
 from pyspark.sql import SparkSession,SQLContext
 from pyspark import SparkConf, SparkContext
 from pyspark.sql.functions import lit,concat,month,year,substring,when,ceil,udf
@@ -61,7 +60,7 @@ for dbe in config["DbEntities"]:
                                     .withColumnRenamed('NewCompanyName','EntityName')  
             df = Company.select("StartDate","EndDate")
             Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%m/%d/%Y").date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
             Calendar_EndDate = datetime.datetime.today().date() 
             
             data =[]

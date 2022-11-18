@@ -54,7 +54,7 @@ for dbe in config["DbEntities"]:
         CompanyName=CompanyName.replace(" ","")
         try:
             logger = Logger()
-            DC_Config=spark.read.format("parquet").load(STAGE1_Configurator_Path+"/tblDimensionCode") 
+            DC_Config=spark.read.format("parquet").load(STAGE1_Configurator_Path+"/tblDimensionCode")  
             df_dimension = DC_Config.filter(DC_Config['DBName'] == DBName ).filter(DC_Config['EntityName'] == EntityName).filter(DC_Config['IsActive'] == 1)
             df_dimension = df_dimension.select("Name")
             list_dimen = df_dimension.collect()

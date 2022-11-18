@@ -1,4 +1,3 @@
-
 from pyspark.sql import SparkSession,SQLContext
 from pyspark import SparkConf, SparkContext
 from pyspark.sql.functions import lit, year,when,to_date,concat
@@ -49,7 +48,6 @@ conf = SparkConf().setMaster("local[16]").setAppName("Budget").\
 sc = SparkContext(conf = conf)
 sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
 cdate = datetime.datetime.now().strftime('%Y-%m-%d')
 for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:

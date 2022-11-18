@@ -50,8 +50,7 @@ conf = SparkConf().setMaster("local[16]").setAppName("Payables_Snapshot").\
 sc = SparkContext(conf = conf)
 sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
-cdate = datetime.datetime.now().strftime('%d-%m-%Y')
+cdate = datetime.datetime.now().strftime('%Y-%m-%d')
 for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
         CompanyName=dbe['Name']
@@ -62,7 +61,7 @@ for dbe in config["DbEntities"]:
             Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
             df = Company.select("StartDate","EndDate")
             Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%m/%d/%Y").date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
            
             if datetime.date.today().month>int(MnSt)-1:
                     UIStartYr=datetime.date.today().year-int(yr)+1
@@ -86,7 +85,7 @@ for dbe in config["DbEntities"]:
                  .withColumnRenamed("PostingDate","VLE_Posting_Date").withColumnRenamed("PostingDate","LinkDate")
             
             vle = vle.join(pih,vle["VLE_Document_No"]==pih["PIH_No"],'left')
-            current_month = datetime.datetime.strptime(cdate,"%d-%m-%Y")
+            current_month = datetime.datetime.strptime(cdate,"%Y-%m-%d")
             current_month = str(current_month.year)+str(current_month.month)
             dvle = DVLE.filter(year(col("PostingDate"))!='1753')
             dvle = dvle.withColumn('AmountLCY',dvle['AmountLCY'].cast('decimal(20,4)'))
@@ -98,7 +97,7 @@ for dbe in config["DbEntities"]:
             dvle = dvle.withColumnRenamed("VendorLedgerEntryNo_","DVVLE_No").withColumnRenamed("DocumentNo_","DVLE_Document_No")
             
             dvle = dvle.withColumn("DVLE_Monthend_Posting_Date",when(dvle.link_month==current_month, cdate).otherwise(last_day(dvle.PostingDate)))
-            dvle = dvle.drop('link_month').drop('DocumentDate')
+            dvle = dvle.drop('link_month').drop('DocumentDate','CurrencyCode')
             cond = [vle.VLE_No==dvle.DVVLE_No]
             df = RJOIN(vle,dvle,cond)
             df1 = VPG.withColumnRenamed("Code","Vendor_Posting_Group").withColumnRenamed("PayablesAccount","GLAccount")
@@ -137,7 +136,7 @@ for dbe in config["DbEntities"]:
                                     .withColumnRenamed('max(Max_Monthend)','Max_Monthend')
             df = Company.select("StartDate","EndDate")
             Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%m/%d/%Y").date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
             if datetime.date.today().month>int(MnSt)-1:
                 UIStartYr=datetime.date.today().year-int(yr)+1
             else:
@@ -145,8 +144,8 @@ for dbe in config["DbEntities"]:
             UIStartDate=datetime.date(UIStartYr,int(MnSt),1)
             
             Calendar_EndDate_conf=df.select(df.EndDate).collect()[0]["EndDate"]
-            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%m/%d/%Y").date()
-            Calendar_EndDate_file=datetime.datetime.strptime(cdate,"%d-%m-%Y").date()
+            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%Y-%m-%d").date()
+            Calendar_EndDate_file=datetime.datetime.strptime(cdate,"%Y-%m-%d").date()
             Calendar_EndDate=min(Calendar_EndDate_conf,Calendar_EndDate_file)
             def last_day_of_month(date):
                     if date.month == 12:

@@ -28,30 +28,29 @@ DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
 STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster(SPARK_MASTER).setAppName("PurchaseOrder")\
-        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
-        .set("spark.kryoserializer.buffer.max","512m")\
-        .set("spark.cores.max","24")\
-        .set("spark.executor.memory","4g")\
-        .set("spark.driver.memory","24g")\
-        .set("spark.driver.maxResultSize","20g")\
-        .set("spark.memory.offHeap.enabled",'true')\
-        .set("spark.memory.offHeap.size","100g")\
-        .set('spark.scheduler.mode', 'FAIR')\
-        .set("spark.sql.broadcastTimeout", "36000")\
-        .set("spark.network.timeout", 10000000)\
-        .set("spark.jars.packages", "io.parquet:parquet-core_2.12:0.7.0")\
-        .set("spark.sql.extensions", "io.parquet.sql.DeltaSparkSessionExtension")\
-        .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.parquet.catalog.DeltaCatalog")\
-        .set("spark.databricks.parquet.vacuum.parallelDelete.enabled",'true')\
-        .set("spark.databricks.parquet.retentionDurationCheck.enabled",'false')\
-        .set('spark.hadoop.mapreduce.output.fileoutputformat.compress', 'false')\
-        .set("spark.rapids.sql.enabled", True)\
-        .set("spark.sql.legacy.parquet.int96RebaseModeInWrite", "CORRECTED")
+conf = SparkConf().setMaster("local[16]").setAppName("PurchaseOrder")\
+        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
+                    set("spark.sql.shuffle.partitions",16).\
+                    set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
+                    set("spark.local.dir", "/tmp/spark-temp").\
+                    set("spark.driver.memory","30g").\
+                    set("spark.executor.memory","30g").\
+                    set("spark.driver.cores",16).\
+                    set("spark.driver.maxResultSize","0").\
+                    set("spark.sql.debug.maxToStringFields", "1000").\
+                    set("spark.executor.instances", "20").\
+                    set('spark.scheduler.mode', 'FAIR').\
+                    set("spark.sql.broadcastTimeout", "36000").\
+                    set("spark.network.timeout", 10000000).\
+                    set("spark.sql.legacy.parquet.datetimeRebaseModeInWrite", "LEGACY").\
+                    set("spark.sql.legacy.parquet.datetimeRebaseModeInRead", "LEGACY").\
+                    set("spark.sql.legacy.parquet.datetimeRebaseModeInRead", "CORRECTED").\
+                    set("spark.sql.legacy.timeParserPolicy","LEGACY").\
+                    set("spark.sql.legacy.parquet.int96RebaseModeInWrite","LEGACY").\
+                    set("spark.sql.legacy.parquet.int96RebaseModeInWrite","CORRECTED")
 sc = SparkContext(conf = conf)
 sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
 cy = date.today().year
 cm = date.today().month
 cdate = datetime.datetime.now().strftime('%Y-%m-%d')

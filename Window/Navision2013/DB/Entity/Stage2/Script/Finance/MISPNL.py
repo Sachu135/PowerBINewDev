@@ -49,7 +49,6 @@ conf = SparkConf().setMaster("local[16]").setAppName("MISPNL").\
 sc = SparkContext(conf = conf)
 sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
 for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
         CompanyName=dbe['Name']
@@ -64,7 +63,7 @@ for dbe in config["DbEntities"]:
             COA=COA.filter(COA['No_']!='SERVER')
             Acc_Sche = Acc_Sche.select("ScheduleName","LineNo_","RowNo_","Description","Totaling",
                                     "TotalingType","ShowOppositeSign","RowType","AmountType")
-            Acc_Sche = Acc_Sche.filter(Acc_Sche["ScheduleName"]=="P&L_NEW")
+            Acc_Sche = Acc_Sche.filter(Acc_Sche["ScheduleName"]=="P&L")
             Acc_Sche = Acc_Sche.withColumn("Totaling",when(Acc_Sche["Description"]=='RE Salary', lit(9999999))\
                                         .otherwise(Acc_Sche["Totaling"]))
             Acc_Sche = Acc_Sche.withColumn("Totaling",when(Acc_Sche["Description"]=='Corporate Expenses', lit(8888888))\

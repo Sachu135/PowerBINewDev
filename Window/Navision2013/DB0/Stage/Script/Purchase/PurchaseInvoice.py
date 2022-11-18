@@ -5,18 +5,23 @@ import pyspark.sql.functions as F
 import os,sys
 from os.path import dirname, join, abspath
 import datetime as dt
-begin_time = dt.datetime.now()
-Connection =abspath(join(join(dirname(__file__), '..'),'..','..','..','DB1'))
-Stage1_Path = abspath(join(join(dirname(__file__),'..','..','..')))
+root_directory =abspath(join(join(dirname(__file__), '..'),'..','..','..',))
+root_directory=root_directory+"/"
+DBList=[]
+for folders in os.listdir(root_directory):
+    if os.path.isdir(os.path.join(root_directory,folders)):
+        if 'DB' in folders:
+            if '0' in folders:
+                pass
+            else:
+                DBList.append(folders )
+Connection =abspath(join(join(dirname(__file__), '..'),'..','..','..',DBList[0]))
 sys.path.insert(0, Connection)
-from Configuration.AppConfig import * 
 from Configuration.Constant import *
-from Configuration.udf import *
-Connection =abspath(join(join(dirname(__file__), '..'),'..','..','..','DB1','E1'))
 Abs_Path =abspath(join(join(dirname(__file__), '..'),'..','..','..')) 
-KockpitPath =abspath(join(join(dirname(__file__), '..'),'..','..','..'))
-DB0=abspath(join(join(dirname(__file__), '..'),'..','..'))
-DB0 =os.path.split(DB0)
+Kockpit_Path =abspath(join(join(dirname(__file__), '..'),'..','..','..'))
+DBO_Path=abspath(join(join(dirname(__file__), '..'),'..','..'))
+DB0 =os.path.split(DBO_Path)
 DB0 = DB0[1]
 owmode = 'overwrite'
 apmode = 'append'                           
@@ -42,86 +47,78 @@ conf = SparkConf().setMaster("local[16]").setAppName("PurchaseInvoice").\
                     set("spark.sql.legacy.parquet.int96RebaseModeInWrite","CORRECTED")
 sc = SparkContext(conf = conf)
 sqlCtx = SQLContext(sc)
-spark = sqlCtx.sparkSession 
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration()) 
-i=1
-for dbe in config["DbEntities"]:
-    try:
+spark = sqlCtx.sparkSession
+
+try:
+    
+    ConfTab='tblCompanyName'
+    Query="(SELECT *\
+                    FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
+    CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()
+    CompanyDetail=CompanyDetail.filter((CompanyDetail['ActiveCompany']=='true'))
+
+    for d in range(len(DBList)):  
+        DB=DBList[d]
         logger =Logger()
-        count=len(config["DbEntities"])
-        if dbe['ActiveInactive']=='true' and dbe==config["DbEntities"][0]:
-            try:
-                location=dbe['Location']
-                DBName=location[0:3]
-                EntityName=location[-2:]
-                CompanyName=dbe['Location']+dbe['Name']
-                CompanyName=CompanyName.replace(" ","")
-                Path = KockpitPath+"/"+DBName+"/"+EntityName+"/Stage2/ParquetData/Purchase/PurchaseInvoice"
-                fe = fs.exists(sc._jvm.org.apache.hadoop.fs.Path(Path))
-                if(fe):
-                    finalDF=spark.read.format("parquet").load(Path)
-                    finalDF.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="Purchase.PurchaseInvoice", mode=owmode, properties=PostgresDbInfo.props)
-            except Exception as ex:
-                exc_type,exc_value,exc_traceback=sys.exc_info()
-                print("Error:",ex)
-                print("type - "+str(exc_type))
-                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-                print("Error Line No. - "+str(exc_traceback.tb_lineno))
-                logger.endExecution()
-                try:
-                    IDEorBatch = sys.argv[1]
-                except Exception as e :
-                    IDEorBatch = "IDLE"
-                os.system("spark-submit "+KockpitPath+"/Email.py 1 PurchaseInvoice "+CompanyName+" "+DB0+" "+str(exc_traceback.tb_lineno)+"")
-                log_dict = logger.getErrorLoggedRecord('Purchase.PurchaseInvoice  ', DB0, " ", str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
-                log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)        
-        elif dbe['ActiveInactive']=='true' and dbe==config["DbEntities"][i]:
-            try:
-                location=dbe['Location']
-                DBName=location[0:3] 
-                EntityName=location[-2:]
-                CompanyName=dbe['Location']+dbe['Name']
-                CompanyName=CompanyName.replace(" ","")
-                Path1 =KockpitPath+"/"+DBName+"/"+EntityName+"/Stage2/ParquetData/Purchase/PurchaseInvoice"
-                fe = fs.exists(sc._jvm.org.apache.hadoop.fs.Path(Path1))
-                if(fe):
-                    finalDF=spark.read.format("parquet").load(Path1)
-                    finalDF.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="Purchase.PurchaseInvoice", mode=apmode, properties=PostgresDbInfo.props)
-            except Exception as ex:
-                exc_type,exc_value,exc_traceback=sys.exc_info()
-                print("Error:",ex)
-                print("type - "+str(exc_type))
-                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-                print("Error Line No. - "+str(exc_traceback.tb_lineno))
-                logger.endExecution()
+        Query="(SELECT *\
+                    FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
+        CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()
+        CompanyDetail=CompanyDetail.filter((CompanyDetail['ActiveCompany']=='true'))
+        CompanyDetail=CompanyDetail.filter((CompanyDetail['DBName']==DB))
+        NoofRows = CompanyDetail.count()  
+        
+        for i in range(NoofRows): 
             
-                try:
-                    IDEorBatch = sys.argv[1]
-                except Exception as e :
-                    IDEorBatch = "IDLE"
-                
-                os.system("spark-submit "+KockpitPath+"/Email.py 1 PurchaseInvoice "+CompanyName+" "+DB0+" "+str(exc_traceback.tb_lineno)+"")
-                log_dict = logger.getErrorLoggedRecord('Purchase.PurchaseInvoice  ', DB0, " ", str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
-                log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                  
-        elif dbe['ActiveInactive']=='false':
-            
-            continue               
-    except Exception as ex:
-                exc_type,exc_value,exc_traceback=sys.exc_info()
-                print("Error:",ex)
-                print("type - "+str(exc_type))
-                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-                print("Error Line No. - "+str(exc_traceback.tb_lineno))
-                logger.endExecution()
-                try:
-                    IDEorBatch = sys.argv[1]
-                except Exception as e :
-                    IDEorBatch = "IDLE"
-                os.system("spark-submit "+KockpitPath+"/Email.py 1 PurchaseInvoice "+CompanyName+" "+DB0+" "+str(exc_traceback.tb_lineno)+"")
-                log_dict = logger.getErrorLoggedRecord('Purchase.PurchaseInvoice  ', DB0, " ", str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
-                log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-i+=1
-print('Purchase_PurchaseInvoice DB0 completed: ' + str((dt.datetime.now()-st).total_seconds()))  
+                DBName=(CompanyDetail.collect()[i]['DBName'])
+                EntityName =(CompanyDetail.collect()[i]['NewCompanyName'])
+                CompanyName=(CompanyDetail.collect()[i]['CompanyName'])
+                DBE=DBName+EntityName
+                CompanyName=CompanyName.replace(" ","")
+                Path = Abs_Path+"/"+DBName+"/"+EntityName+"\\Stage2\\ParquetData\\Purchase\PurchaseInvoice"
+               
+                if os.path.exists(Path):
+                    
+                    finalDF1=spark.read.parquet(Path)
+                    
+                    if (d==0) & (i==0):
+                       
+                        finalDF=finalDF1
+    
+                    else:
+                        
+                        finalDF=finalDF.unionByName(finalDF1,allowMissingColumns=True)
+                              
+                else:
+                    print("PurchaseInvoice "+DBName+EntityName+" Does not exist")
+                                
+    finalDF.write.jdbc(url=PostgresDbInfo.PostgresUrl , table="Purchase.PurchaseInvoice", mode=owmode, properties=PostgresDbInfo.props)
+              
+    logger.endExecution()
+    try:
+        IDEorBatch = sys.argv[1]
+    except Exception as e :
+        IDEorBatch = "IDLE"
+
+    log_dict = logger.getSuccessLoggedRecord("Purchase.PurchaseInvoice", DB0, " ", finalDF.count(), len(finalDF.columns), IDEorBatch)
+    log_df = spark.createDataFrame(log_dict, logger.getSchema())
+    log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                 
+except Exception as ex:
+    exc_type,exc_value,exc_traceback=sys.exc_info()
+    print("Error:",ex)
+    print("type - "+str(exc_type))
+    print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+    print("Error Line No. - "+str(exc_traceback.tb_lineno))
+    ex = str(ex)
+    logger.endExecution()
+    try:
+        IDEorBatch = sys.argv[1]
+    except Exception as e :
+        IDEorBatch = "IDLE"
+    DBE=DBName+EntityName
+    os.system("spark-submit "+Kockpit_Path+"\Email.py 1 PurchaseInvoice "+CompanyName+" "+" "+str(exc_traceback.tb_lineno)+"")   
+    log_dict = logger.getErrorLoggedRecord('Purchase.PurchaseInvoice', DB0, " " , str(ex), exc_traceback.tb_lineno, IDEorBatch)
+    log_df = spark.createDataFrame(log_dict, logger.getSchema())
+    log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)        
+print('Purchase_ PurchaseInvoice completed: ' + str((dt.datetime.now()-st).total_seconds()))     
+      
+      

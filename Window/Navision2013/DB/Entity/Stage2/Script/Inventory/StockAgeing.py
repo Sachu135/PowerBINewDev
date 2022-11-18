@@ -1,4 +1,3 @@
-
 from pyspark.sql import SparkSession
 from pyspark import SparkConf, SparkContext, StorageLevel
 from pyspark.sql import SQLContext
@@ -12,7 +11,7 @@ import traceback
 import os
 from os.path import dirname, join, abspath
 from distutils.command.check import check
-import time
+import time,re
 import datetime as dt
 st = dt.datetime.now()
 from os.path import dirname, join, abspath
@@ -57,7 +56,6 @@ conf = SparkConf().setMaster("local[16]").setAppName("StockAgeing").\
 sc = SparkContext(conf = conf)
 sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
 cdate = datetime.datetime.now().strftime('%Y-%m-%d')
 for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
@@ -129,7 +127,7 @@ for dbe in config["DbEntities"]:
             Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
             df = Company.select("StartDate","EndDate")
             Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%m/%d/%Y").date()
+            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
             
             if datetime.date.today().month>int(MnSt)-1:
                     UIStartYr=datetime.date.today().year-int(yr)+1
@@ -139,7 +137,7 @@ for dbe in config["DbEntities"]:
             UIStartDate=max(Calendar_StartDate,UIStartDate)
             
             Calendar_EndDate_conf=df.select(df.EndDate).collect()[0]["EndDate"]
-            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%m/%d/%Y").date()
+            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%Y-%m-%d").date()
             Calendar_EndDate_file=datetime.datetime.strptime(cdate,"%Y-%m-%d").date()
             Calendar_EndDate=min(Calendar_EndDate_conf,Calendar_EndDate_file)
             days = (Calendar_EndDate-UIStartDate).days

@@ -14,7 +14,6 @@ from Configuration.AppConfig import *
 from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf as Kockpit
-
 Filepath = os.path.dirname(os.path.abspath(__file__))
 FilePathSplit = Filepath.split('\\')
 DBName = FilePathSplit[-5]
@@ -52,8 +51,8 @@ for dbe in config["DbEntities"]:
         try:
             
             logger = Logger()
-            pcml = spark.read.format("parquet").load(STAGE1_PATH+"/Purch_ Cr_ Memo Line").drop('DBName','EntityName','YearMonth','locationcode','PostingDate')
-            pcmh = spark.read.format("parquet").load(STAGE1_PATH+"/Purch_ Cr_ Memo Hdr_").drop('YearMonth')
+            pcml = spark.read.format("parquet").load(STAGE1_PATH+"/Purch_ Cr_ Memo Line").select('Amount','AmountIncludingTax','Buy-fromVendorNo_','Description','DimensionSetID','DocumentNo_','ExpectedReceiptDate','LineNo_','Quantity','UnitCost','VariantCode')
+            pcmh = spark.read.format("parquet").load(STAGE1_PATH+"/Purch_ Cr_ Memo Hdr_").select('PaymentTermsCode','DueDate','PostingDate','Pay-toVendorNo_','PurchaserCode','Applies-toDoc_No_','Applies-toDoc_Type','No_')
             pcmh =pcmh.withColumnRenamed("No_","Purchase_No")
             cond = [pcml.DocumentNo_ == pcmh.Purchase_No]
             Purchase = Kockpit.LJOIN(pcml,pcmh,cond)

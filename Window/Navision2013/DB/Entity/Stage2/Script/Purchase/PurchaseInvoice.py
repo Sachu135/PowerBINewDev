@@ -47,7 +47,6 @@ conf = SparkConf().setMaster("local[16]").setAppName("PurchaseInvoice").\
 sc = SparkContext(conf = conf)
 sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
 
 for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
@@ -78,7 +77,7 @@ for dbe in config["DbEntities"]:
                     .withColumn("LinkLocationCode",when(pil.LocationCode=='',lit("NA")).otherwise(pil.LocationCode))\
                     
             Line = Kockpit.RENAME(Line,{"DimensionSetID":"DimSetID","DocumentNo_":"Document_No","Amount":"PurchaseAmount"})
-            Line = Line.drop('PostingDate')
+            Line = Line.drop('PostingDate','timestamp')
             Header = pih\
                     .withColumn("LinkVendor",when(pih['Pay-toVendorNo_']=='',lit("NA")).otherwise(pih["Pay-toVendorNo_"])).drop("Pay-toVendorNo_")\
                     .withColumn("MonthNum", month(pih.PostingDate))\
@@ -88,14 +87,16 @@ for dbe in config["DbEntities"]:
             Monthsdf = Kockpit.MONTHSDF(sqlCtx)
             mcond = [Header.MonthNum==Monthsdf.MonthNum1]
             Header = Kockpit.LJOIN(Header,Monthsdf,mcond)
-            Header = Header.drop('MonthNum','MonthNum1')
+            Header = Header.drop('MonthNum','MonthNum1','timestamp')
             Header = Header.na.fill({'Purchase_No':'NA'})
             GL_Master = gps.withColumn("GL_LinkDrop",concat_ws('|',lit(entityLocation),gps.Gen_Bus_PostingGroup,gps.Gen_Prod_PostingGroup)).drop('Gen_Bus_PostingGroup','Gen_Prod_PostingGroup')\
                                     .withColumn("GLAccount",when(gps.Purch_Account=='',0).otherwise(gps.Purch_Account)).drop('Purch_Account')
             Line = Line.withColumn('Document_No_key',concat_ws('|',lit(entityLocation),Line.Document_No))
             Header = Header.withColumn('Purchase_No_key',concat_ws('|',lit(entityLocation),Header.Purchase_No))
+            
             cond = [Line.Document_No_key == Header.Purchase_No_key]
             Purchase = Kockpit.LJOIN(Line,Header,cond)
+            
             Purchase = Purchase.withColumn('LinkRcptKey',concat_ws('|',Purchase.ReceiptDocumentNo_,Purchase.ReceiptDocumentLineNo_))
             GLRange = GLRange.filter(GLRange['DBName'] == DBName ).filter(GLRange['EntityName'] == EntityName ).filter(GLRange['GLRangeCategory']== 'Purchase Trading')
             GLRange = Kockpit.RENAME(GLRange,{'FromGLCode':'FromGL','ToGLCode':'ToGL','GLRangeCategory':'GLCategory'})
@@ -103,6 +104,7 @@ for dbe in config["DbEntities"]:
             cond1 = [Purchase.GL_Link == GL_Master.GL_LinkDrop]
             Purchase = Kockpit.LJOIN(Purchase,GL_Master,cond1)
             Purchase = Purchase.drop("GL_LinkDrop","GL_Link","Sales_No","Sales_No_key","Document_No_key")
+           
             pld = pld.filter((pld.Type==2) & (pld.DocumentType==2) & (pld.Tax_ChargeType==0))
             LineDetails = pld.withColumn("Link_GDDrop",concat_ws('-',pld.InvoiceNo_,pld.LineNo_)).drop("InvoiceNo_","LineNo_")\
                                                     .withColumnRenamed("AccountNo_","AccountNo")
@@ -125,8 +127,10 @@ for dbe in config["DbEntities"]:
                     Range1 = (Range1) | ((Purchase.No>=GLRange.select('FromGL').collect()[i]['FromGL']) \
                                         & (Purchase.No<=GLRange.select('ToGL').collect()[i]['ToGL']))
         
+            
             Purchase = Purchase.filter(((Purchase.Type!=2) | ((Purchase.Type==2) & (Range))) & ((Purchase.Type!=1) | ((Purchase.Type==1) & (Range1))))     
             Purchase = Purchase.withColumn("PurchaseAccount",when(Purchase.Type==2,Purchase.GLAccount).otherwise(when(Purchase.Type==1,Purchase.No).otherwise(lit(1))))
+
             Range2 = LineDetails['AccountNo']!=0
             NoOfRows = GLRange.count()
             for j in range(0,NoOfRows):
@@ -138,13 +142,16 @@ for dbe in config["DbEntities"]:
                     FromGL = "%s"%GLRange.select(GLRange.FromGL).collect()[i]['FromGL']
                     ToGL = "%s"%GLRange.select(GLRange.ToGL).collect()[i]['ToGL']
                     Range2 = (LineDetails['AccountNo']>=FromGL) & (LineDetails['AccountNo']<=ToGL)
-        
+            
             LineDetails = LineDetails[Range2]
             LineDetails=LineDetails.groupby('Link_GDDrop').sum('Amount').withColumnRenamed('sum(Amount)','ChargesfromVendor')
             cond2 = [Purchase.Link_GD == LineDetails.Link_GDDrop]
+           
+            
             Purchase = Kockpit.LJOIN(Purchase,LineDetails,cond2)
-            Purchase = Purchase.drop("Link_GDDrop")
+            Purchase = Purchase.drop("Link_GDDrop","Locationtype")
             Purchase = Purchase.withColumn('TransactionType',lit('Invoice'))
+            Purchase=Kockpit.RenameDuplicateColumns(Purchase)
             Purchase = Purchase.na.fill({'LinkLocationCode':'NA'})
             Purchase = Purchase.na.fill({'GLAccount':''})
             Purchase = Purchase.na.fill({'CurrencyFactor':0})
@@ -206,7 +213,6 @@ for dbe in config["DbEntities"]:
             Purchase = Kockpit.LJOIN(Purchase,pt,cond4)
             Purchase = Kockpit.RenameDuplicateColumns(Purchase).drop("expectedreceiptdate_1","LineNo__1","LinkRcptKey_1")
             Purchase.cache()
-            print(Purchase.count())
             Purchase.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseInvoice")
             logger.endExecution()
             try:

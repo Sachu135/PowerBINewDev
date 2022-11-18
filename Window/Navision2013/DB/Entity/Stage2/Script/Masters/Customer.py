@@ -55,6 +55,7 @@ for dbe in config["DbEntities"]:
             logger = Logger()
             columns=Kockpit.TableRename("Customer")      
             finalDF=spark.read.format("parquet").load(STAGE1_PATH+"/Customer")
+            
             finalDF=finalDF.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
             finalDF = finalDF.withColumn('Link Customer Key',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["No_"]))
             finalDF = RENAME(finalDF,columns)   

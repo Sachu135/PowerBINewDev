@@ -23,7 +23,7 @@ class ConfiguratorDbInfo:
     PostgresDB = "Configurator" 
     Schema = "#ConfiguratorDbInfo_Schema"              
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
-	props = {"user":"#ConfiguratorDbInfo_User", "password":"#ConfiguratorDbInfo_Password", "driver": "org.postgresql.Driver"}
+    props = {"user":"#ConfiguratorDbInfo_User", "password":"#ConfiguratorDbInfo_Password", "driver": "org.postgresql.Driver"}
 class ConnectionInfo:
     JDBC_PARAM = "jdbc"
     SQL_SERVER_DRIVER = "com.microsoft.sqlserver.jdbc.SQLServerDriver"

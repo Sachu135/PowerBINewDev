@@ -58,7 +58,7 @@ for dbe in config["DbEntities"]:
         
         logger = Logger()
         entityLocation = DBName+EntityName
-        pah = spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Header Archive").drop("YearMonth")
+        pah = spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Header Archive").drop("PromisedReceiptDate")
         DSE=spark.read.format("parquet").load(STAGE2_PATH+"/"+"Masters/DSE").drop("DBName","EntityName")
         ph=spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Header")
         ph=ph.withColumn("PromisedReceiptDate",when((year(ph.PromisedReceiptDate)<1900)|(ph.PromisedReceiptDate.isNull()),to_date(ph.PostingDate)).otherwise(to_date(ph.PromisedReceiptDate)))
@@ -69,7 +69,7 @@ for dbe in config["DbEntities"]:
                                 .where(f.col('VersionNo_') == f.col('Version_No_max')).drop("Version_No_max")
         pah=pah.withColumn('LinkVersionKey',concat_ws('|',pah.No_,pah.VersionNo_))
         pah = pah.filter((year(col("PostingDate"))!='1753'))
-        pal = spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Line Archive").drop("DBName","EntityName","PostingDate")
+        pal = spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Line Archive").drop("DBName","EntityName","PostingDate","PromisedReceiptDate")
         w1 = Window.partitionBy('DocumentNo_')
         pal=pal.withColumn('Version_No_max', f.max('VersionNo_').over(w1))\
                                 .where(f.col('VersionNo_') == f.col('Version_No_max')).drop("Version_No_max")
@@ -78,17 +78,17 @@ for dbe in config["DbEntities"]:
         Purchase = Kockpit.LJOIN(pal,pah,cond)
         cond2 = [Purchase.DocumentNo_ == ph.No_]
         Purchase = Kockpit.LJOIN(Purchase,ph,cond2)
-        Purchase= Purchase.withColumn("NOD",datediff(Purchase['PromisedReceiptDate'],lit(datetime.datetime.today())))
+        Purchase= Purchase.withColumn("NODays",datediff(Purchase['PromisedReceiptDate'],lit(datetime.datetime.today())))
         PDDBucket =spark.read.format("parquet").load(STAGE1_Configurator_Path+"/tblPDDBucket")
         Maxoflt = PDDBucket.filter(PDDBucket['BucketName']=='<')
         MaxLimit = int(Maxoflt.select('MaxLimit').first()[0])
         Minofgt = PDDBucket.filter(PDDBucket['BucketName']=='>')
         MinLimit = int(Minofgt.select('MinLimit').first()[0])
-        Purchase = Purchase.join(PDDBucket,PromisedReceiptDate == PDDBucket.Nod,'left').drop('ID','UpperLimit','LowerLimit')
-        Purchase=Purchase.withColumn('BucketName',when(Purchase.PromisedReceiptDate>=MinLimit,lit(str(MinLimit)+'+')).otherwise(Purchase.BucketName))\
-                    .withColumn('Nod',when(Purchase.PromisedReceiptDate>=MinLimit,Purchase.PromisedReceiptDate).otherwise(Purchase.Nod))
-        Purchase=Purchase.withColumn('BucketName',when(Purchase.PromisedReceiptDate<=(MaxLimit),lit("Not Due")).otherwise(Purchase.BucketName))\
-                    .withColumn('Nod',when(Purchase.PromisedReceiptDate<=(MaxLimit), Purchase.PromisedReceiptDate).otherwise(Purchase.Nod))
+        Purchase = Purchase.join(PDDBucket,Purchase.NODays == PDDBucket.Nod,'left').drop('ID','UpperLimit','LowerLimit')
+        Purchase=Purchase.withColumn('BucketName',when(Purchase.NODays>=MinLimit,lit(str(MinLimit)+'+')).otherwise(Purchase.BucketName))\
+                    .withColumn('Nod',when(Purchase.NODays>=MinLimit,Purchase.NODays).otherwise(Purchase.Nod))
+        Purchase=Purchase.withColumn('BucketName',when(Purchase.NODays<=(MaxLimit),lit("Not Due")).otherwise(Purchase.BucketName))\
+                    .withColumn('Nod',when(Purchase.NODays<=(MaxLimit), Purchase.NODays).otherwise(Purchase.Nod))
         Purchase = Purchase.join(DSE,"DimensionSetID",'left')
         Purchase = Kockpit.RenameDuplicateColumns(Purchase)
         Purchase.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseArchive2")
