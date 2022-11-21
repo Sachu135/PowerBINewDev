@@ -10,9 +10,7 @@ DIR_PATH="#ConfiguratorInstallationDrive"
 SPARK_MASTER = "spark://#ConfiguratorDbInfo_ServerIP:7077"
 class PostgresDbInfo:
     Host = "#PostgresDbInfo_Host"      
-    Port = "#PostgresDbInfo_Port"   
-    MetadataDB = ".metadata"
-    MetadataDBUrl = "jdbc:postgresql://" + Host + "/" + MetadataDB
+    Port = "#PostgresDbInfo_Port"
     PostgresDB = "#PostgresDbInfo_PostgresDB"  
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
     props = {"user":"#PostgresDbInfo_User", "password":"#PostgresDbInfo_Password", "driver": "org.postgresql.Driver"}   
