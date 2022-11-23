@@ -10,9 +10,7 @@ DIR_PATH="/home/hadoop/KOCKPIT"
 SPARK_MASTER = 'spark://192.168.9.31:7077'
 class PostgresDbInfo:
     Host = "192.168.9.34"      
-    Port = "5432"   
-    MetadataDB = ".metadatatesting"
-    MetadataDBUrl = "jdbc:postgresql://" + Host + "/" + MetadataDB
+    Port = "5432"  
     PostgresDB = "testing_db1e1"  
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
     props = {"user":"postgres", "password":"sa@123", "driver": "org.postgresql.Driver"}   
