@@ -23,7 +23,7 @@ DBEntity = DBName+EntityName
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
-conf = SparkConf().setMaster("local[16]").setAppName("Receivables").\
+conf = SparkConf().setMaster("local[*]").setAppName("Receivables").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\

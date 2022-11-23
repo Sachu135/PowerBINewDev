@@ -164,4 +164,4 @@ for dbe in config["DbEntities"]:
             log_dict = logger.getErrorLoggedRecord('Dimensions', '', '', str(ex), exc_traceback.tb_lineno, IDEorBatch)
             log_df = spark.createDataFrame(log_dict, logger.getSchema())
             log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-print('masters_dimensions completed: ' + str((dt.datetime.now()-st).total_seconds()))
+print('masters_Dimensions completed: ' + str((dt.datetime.now()-st).total_seconds()))

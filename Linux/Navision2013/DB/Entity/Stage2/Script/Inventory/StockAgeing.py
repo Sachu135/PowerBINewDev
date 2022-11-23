@@ -69,7 +69,6 @@ for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
         CompanyName=dbe['Name']
         CompanyName=CompanyName.replace(" ","")                                       
-
         try:
             logger = Logger()
             Datelog = datetime.datetime.now().strftime('%Y-%m-%d')
@@ -226,7 +225,6 @@ for dbe in config["DbEntities"]:
             except Exception as e :
                 IDEorBatch = "IDLE"
             os.system("spark-submit "+Kockpit_Path+"/Email.py 1 StockAgeing '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+" ")
-    
             log_dict = logger.getErrorLoggedRecord('Inventory.StockAgeing', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
             log_df = spark.createDataFrame(log_dict, logger.getSchema())
             log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)

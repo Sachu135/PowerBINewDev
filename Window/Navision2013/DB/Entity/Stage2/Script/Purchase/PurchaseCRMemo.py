@@ -22,7 +22,7 @@ DBEntity = DBName+EntityName
 entityLocation = DBName+EntityName
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[16]").setAppName("PurchaseCRMemo").\
+conf = SparkConf().setMaster("local[*]").setAppName("PurchaseCRMemo").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
@@ -53,8 +53,7 @@ for dbe in config["DbEntities"]:
             logger = Logger()
             pcml = spark.read.format("parquet").load(STAGE1_PATH+"/Purch_ Cr_ Memo Line").select('Amount','AmountIncludingTax','Buy-fromVendorNo_','Description','DimensionSetID','DocumentNo_','ExpectedReceiptDate','LineNo_','Quantity','UnitCost','VariantCode')
             pcmh = spark.read.format("parquet").load(STAGE1_PATH+"/Purch_ Cr_ Memo Hdr_").select('PaymentTermsCode','DueDate','PostingDate','Pay-toVendorNo_','PurchaserCode','Applies-toDoc_No_','Applies-toDoc_Type','No_')
-            pcmh =pcmh.withColumnRenamed("No_","Purchase_No")
-            cond = [pcml.DocumentNo_ == pcmh.Purchase_No]
+            cond = [pcml.DocumentNo_ == pcmh.No_]
             Purchase = Kockpit.LJOIN(pcml,pcmh,cond)
             Purchase.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseCRMemo")
             logger.endExecution()

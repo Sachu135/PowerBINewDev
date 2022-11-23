@@ -20,7 +20,6 @@ FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 
@@ -60,7 +59,6 @@ for dbe in config["DbEntities"]:
             logger = Logger()      
             finalDF=spark.read.format("delta").load(STAGE1_PATH+"/Customer")
             finalDF = RENAME(finalDF,{"No_":"Link Customer","Name":"Customer Name","City":"Customer City","ChainName":"Customer Group Name","Country_RegionCode":"Country Region Code","PostCode":"Customer Post Code","StateCode":"Customer State Code","Sector":"Sector Name"}) 
-            
             finalDF=finalDF.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
             finalDF = finalDF.withColumn('Link Customer Key',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["Link Customer"]))
             result_df = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])

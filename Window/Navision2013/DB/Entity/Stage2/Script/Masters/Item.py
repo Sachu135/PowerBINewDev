@@ -23,10 +23,9 @@ FilePathSplit = Filepath.split('\\')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[16]").setAppName("Item").\
+conf = SparkConf().setMaster("local[*]").setAppName("Item").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
@@ -54,22 +53,17 @@ for dbe in config["DbEntities"]:
         CompanyName=CompanyName.replace(" ","")
         try:
             logger = Logger()   
-            columns=Kockpit.TableRename("Item")
             Item=spark.read.format("parquet").load(STAGE1_PATH+"/Item" )
             Item =Item.select("No_","ManufacturerCode","Description","ItemCategoryCode","ProductGroupCode","BaseUnitofMeasure")
+            Item = RENAME(Item,{"No_":"Link Item","Description":"Item Description","ManufacturerCode":"Item Manufacturer","Base Unit of Measure":"Unit"})
+            
             Item = Item.withColumn("ProductGroupCode",concat_ws("|",Item.ItemCategoryCode,Item.ProductGroupCode))
-             
             ItemCategory=spark.read.format("parquet").load(STAGE1_PATH+"/Item Category")
             ItemCategory =ItemCategory.select("Code","Description")
-           
             ItemCategory = ItemCategory.withColumnRenamed("Code","ItemCategoryCode").withColumnRenamed("Description","ItemCategory")
             ItemCategory = ItemCategory.select('ItemCategory','ItemCategoryCode')
-            ItemCategory = ItemCategory.withColumnRenamed('ItemCategory','ProductCategoty')
-             
             ProductGroup=spark.read.format("parquet").load(STAGE1_PATH+"/Product Group")
-            
             ProductGroup=ProductGroup.select("Code","ItemCategoryCode","Description")
-            
             ProductGroup = ProductGroup.withColumn("ProductGroupCode",concat_ws("|",ProductGroup.ItemCategoryCode,ProductGroup.Code))
             ProductGroup = ProductGroup.drop('ItemCategoryCode')\
                                     .withColumnRenamed('Code','ProductGroup')\
@@ -77,10 +71,8 @@ for dbe in config["DbEntities"]:
             
             Item = LJOIN(Item,ItemCategory,'ItemCategoryCode')
             finalDF = LJOIN(Item,ProductGroup,'ProductGroupCode')
-            finalDF = RENAME(finalDF,columns)
             finalDF=finalDF.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
             finalDF = finalDF.withColumn('Link Item Key',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["Link Item"]))
-            
             finalDF = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])
             finalDF = finalDF.select([F.col(col).alias(col.replace("(","")) for col in finalDF.columns])
             finalDF = finalDF.select([F.col(col).alias(col.replace(")","")) for col in finalDF.columns])      

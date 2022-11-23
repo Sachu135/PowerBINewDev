@@ -21,7 +21,6 @@ FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("Location")\
@@ -56,8 +55,7 @@ for dbe in config["DbEntities"]:
     if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
         CompanyName=dbe['Name']
         CompanyName=CompanyName.replace(" ","")
-        try:
-            # columns=Kockpit.TableRename("Location")      
+        try:   
             logger = Logger()
             finalDF=spark.read.format("delta").load(STAGE1_PATH+"/Location" )
             finalDF = RENAME(finalDF,{"Code":"Link Location","Name":"Location Name","City":"Location City","PostCode":"Location Post Code","StateCode":"Location State Code","Country_RegionCode":"Location Country Region Code"})  

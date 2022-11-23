@@ -28,7 +28,7 @@ entityLocation = DBName+EntityName
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
-conf = SparkConf().setMaster("local[16]").setAppName("PurchaseArchive2").\
+conf = SparkConf().setMaster("local[*]").setAppName("PurchaseArchive2").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
@@ -80,6 +80,7 @@ for dbe in config["DbEntities"]:
         Purchase = Kockpit.LJOIN(Purchase,ph,cond2)
         Purchase= Purchase.withColumn("NODays",datediff(Purchase['PromisedReceiptDate'],lit(datetime.datetime.today())))
         PDDBucket =spark.read.format("parquet").load(STAGE1_Configurator_Path+"/tblPDDBucket")
+        PDDBucket = PDDBucket.filter(PDDBucket['DBName'] == DBName).filter(PDDBucket['EntityName'] == EntityName)
         Maxoflt = PDDBucket.filter(PDDBucket['BucketName']=='<')
         MaxLimit = int(Maxoflt.select('MaxLimit').first()[0])
         Minofgt = PDDBucket.filter(PDDBucket['BucketName']=='>')

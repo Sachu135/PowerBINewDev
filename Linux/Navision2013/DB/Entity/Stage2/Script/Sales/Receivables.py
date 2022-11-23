@@ -22,7 +22,6 @@ EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("Receivables")\
        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
         .set("spark.kryoserializer.buffer.max","512m")\

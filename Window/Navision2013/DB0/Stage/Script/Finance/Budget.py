@@ -14,7 +14,7 @@ for folders in os.listdir(root_directory):
             if '0' in folders:
                 pass
             else:
-                DBList.append(folders )
+                DBList.insert(0,folders )
 Connection =abspath(join(join(dirname(__file__), '..'),'..','..','..',DBList[0]))
 sys.path.insert(0, Connection)
 from Configuration.Constant import *
@@ -26,7 +26,7 @@ DB0 = DB0[1]
 owmode = 'overwrite'
 apmode = 'append'                           
 st = dt.datetime.now()
-conf = SparkConf().setMaster("local[16]").setAppName("Budget").\
+conf = SparkConf().setMaster("local[*]").setAppName("Budget").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
@@ -50,7 +50,7 @@ sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
 
 try:
-    
+    logger =Logger()
     ConfTab='tblCompanyName'
     Query="(SELECT *\
                     FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
@@ -58,8 +58,7 @@ try:
     CompanyDetail=CompanyDetail.filter((CompanyDetail['ActiveCompany']=='true'))
 
     for d in range(len(DBList)):  
-        DB=DBList[d]
-        logger =Logger()
+        DB=DBList[d]  
         Query="(SELECT *\
                     FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
         CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()

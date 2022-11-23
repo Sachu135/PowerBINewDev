@@ -60,8 +60,7 @@ for dbe in config["DbEntities"]:
             logger = Logger()
             pcml = spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Cr_ Memo Line").select('Amount','AmountIncludingTax','Buy-fromVendorNo_','Description','DimensionSetID','DocumentNo_','ExpectedReceiptDate','LineNo_','Quantity','UnitCost','VariantCode')
             pcmh = spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Cr_ Memo Hdr_").select('PaymentTermsCode','DueDate','PostingDate','Pay-toVendorNo_','PurchaserCode','Applies-toDoc_No_','Applies-toDoc_Type','No_')
-            pcmh =pcmh.withColumnRenamed("No_","Purchase_No")
-            cond = [pcml.DocumentNo_ == pcmh.Purchase_No]
+            cond = [pcml.DocumentNo_ == pcmh.No_]
             Purchase = Kockpit.LJOIN(pcml,pcmh,cond)
             Purchase.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseCRMemo")
             logger.endExecution()

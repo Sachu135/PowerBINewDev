@@ -14,7 +14,6 @@ from Configuration.AppConfig import *
 from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf as Kockpit
-
 Filepath = os.path.dirname(os.path.abspath(__file__))
 FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
@@ -55,9 +54,7 @@ for dbe in config["DbEntities"]:
         CompanyName=dbe['Name']
         CompanyName=CompanyName.replace(" ","")
         try:
-            
             logger = Logger()
-            entityLocation = DBName+EntityName
             VLE=spark.read.format("delta").load(STAGE1_PATH+"/Vendor Ledger Entry")
             DVLE=spark.read.format("delta").load(STAGE1_PATH+"/Detailed Vendor Ledg_ Entry")
             pih =spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Inv_ Header")

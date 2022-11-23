@@ -23,10 +23,9 @@ FilePathSplit = Filepath.split('\\')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[16]").setAppName("Salesperson").\
+conf = SparkConf().setMaster("local[*]").setAppName("Salesperson").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
@@ -54,22 +53,23 @@ for dbe in config["DbEntities"]:
         CompanyName=CompanyName.replace(" ","")
         try: 
             logger = Logger()
-            columns=Kockpit.TableRename("Salesperson_Purchaser") 
             SalesPerson =spark.read.format("parquet").load(STAGE1_PATH+"/Salesperson_Purchaser") 
             RSM = SalesPerson.select('Code','Name')\
-                        .withColumnRenamed('Name','RSM_Name').withColumnRenamed('Code','RSM')           
+                        .withColumnRenamed('Name','RSM_Name').withColumnRenamed('Code','RSM')
+                      
             SalesPerson = SalesPerson.join(RSM,'RSM','left')                       
             BUHead = SalesPerson.select('Code','Name')\
-                            .withColumnRenamed('Name','BUHead_Name').withColumnRenamed('Code','BUHead')             
+                            .withColumnRenamed('Name','BUHead_Name').withColumnRenamed('Code','BUHead')
+                            
             finalDF = SalesPerson.join(BUHead,'BUHead','left')
-            finalDF = RENAME(finalDF,columns)
+            finalDF = RENAME(finalDF,{"Code":"Link SalesPerson","Name":"Sales Person"})   
             finalDF=finalDF.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
             finalDF = finalDF.withColumn('Link SalesPerson Key',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["Link SalesPerson"]))
             finalDF = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])
             finalDF = finalDF.select([F.col(col).alias(col.replace("(","")) for col in finalDF.columns])
             finalDF = finalDF.select([F.col(col).alias(col.replace(")","")) for col in finalDF.columns])
             finalDF.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/Salesperson")
-          
+            
             logger.endExecution()
             try:
                 IDEorBatch = sys.argv[1]

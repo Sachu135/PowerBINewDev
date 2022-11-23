@@ -27,8 +27,7 @@ DBEntity = DBName+EntityName
 entityLocation = DBName+EntityName
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
-conf = SparkConf().setMaster("local[16]").setAppName("PurchaseArchive").\
+conf = SparkConf().setMaster("local[*]").setAppName("PurchaseArchive").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\

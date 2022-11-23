@@ -24,7 +24,6 @@ FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
 STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
@@ -69,6 +68,7 @@ for dbe in config["DbEntities"]:
             plDF = spark.read.format("delta").load(STAGE1_PATH+"/Purchase Line")
             DSE=spark.read.format("delta").load(STAGE2_PATH+"/"+"Masters/DSE")
             PDDBucket =spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblPDDBucket")
+            PDDBucket = PDDBucket.filter(PDDBucket['DBName'] == DBName).filter(PDDBucket['EntityName'] == EntityName)
             SH = spark.read.format("delta").load(STAGE1_PATH+"/Sales Header").select('No_','Bill-toCustomerNo_')\
                         .withColumnRenamed('No_','SalesOrderNo').withColumnRenamed('Bill-toCustomerNo_','CustomerCode')
             SL = spark.read.format("delta").load(STAGE1_PATH+"/Sales Line").select('DocumentNo_','LineNo_','Pur_OrderNo_','POLineNo_')\

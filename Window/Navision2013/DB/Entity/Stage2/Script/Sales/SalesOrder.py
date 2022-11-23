@@ -1,4 +1,3 @@
-from pyspark.sql import SparkSession,SQLContext
 from pyspark import SparkConf, SparkContext
 from pyspark.sql.functions import lit, year,when,datediff,col,to_date,concat
 from pyspark.sql.types import *
@@ -30,7 +29,7 @@ DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
 STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[16]").setAppName("SalesOrder").\
+conf = SparkConf().setMaster("local[*]").setAppName("SalesOrder").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
@@ -71,7 +70,8 @@ for dbe in config["DbEntities"]:
                     .withColumn("Transaction_Type",lit("SalesOrder"))
               
             PDDBucket = spark.read.format("parquet").load(STAGE1_Configurator_Path+"/tblPDDBucket")
-            
+            PDDBucket = PDDBucket.filter(PDDBucket['DBName'] == DBName).filter(PDDBucket['EntityName'] == EntityName)
+
             DSE=spark.read.format("parquet").load(STAGE2_PATH+"/"+"Masters/DSE").drop("DBName","EntityName")
             Maxoflt = PDDBucket.filter(PDDBucket['BucketName']=='<')
             MaxLimit = int(Maxoflt.select('MaxLimit').first()[0])

@@ -6,22 +6,24 @@ yr = 3
 owmode = 'overwrite'
 apmode = 'append'
 HDFS_PATH = "hdfs://master:9000"
-DIR_PATH="#ConfiguratorInstallationDrive"
-SPARK_MASTER = "spark://#ConfiguratorDbInfo_ServerIP:7077"
+DIR_PATH="/home/hadoop/KOCKPIT"
+SPARK_MASTER = 'spark://192.168.9.31:7077'
 class PostgresDbInfo:
-    Host = "#PostgresDbInfo_Host"      
-    Port = "#PostgresDbInfo_Port"
-    PostgresDB = "#PostgresDbInfo_PostgresDB"  
+    Host = "192.168.9.34"      
+    Port = "5432"   
+    MetadataDB = ".metadatatesting"
+    MetadataDBUrl = "jdbc:postgresql://" + Host + "/" + MetadataDB
+    PostgresDB = "testing_db1e1"  
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
-    props = {"user":"#PostgresDbInfo_User", "password":"#PostgresDbInfo_Password", "driver": "org.postgresql.Driver"}   
+    props = {"user":"postgres", "password":"sa@123", "driver": "org.postgresql.Driver"}   
     
-class ConfiguratorDbInfo:
-    Host = "#ConfiguratorDbInfo_Host"     
-    Port = "#ConfiguratorDbInfo_Port"               
+class ConfiguratorDbInfo: 
+    Host = "4.224.250.143"     
+    Port = "5432"         
     PostgresDB = "Configurator" 
-    Schema = "#ConfiguratorDbInfo_Schema"              
+    Schema = "kockpittesting"              
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
-    props = {"user":"#ConfiguratorDbInfo_User", "password":"#ConfiguratorDbInfo_Password", "driver": "org.postgresql.Driver"}
+    props = {"user":"sachin.pandey@kockpit.in", "password":"mCS&OGtq", "driver": "org.postgresql.Driver"}
 class ConnectionInfo:
     JDBC_PARAM = "jdbc"
     SQL_SERVER_DRIVER = "com.microsoft.sqlserver.jdbc.SQLServerDriver"
@@ -93,4 +95,6 @@ class Logger:
                 }]
         
         
- 
+     
+        
+    

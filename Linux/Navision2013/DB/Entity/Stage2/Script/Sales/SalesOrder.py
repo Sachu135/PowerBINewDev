@@ -23,7 +23,6 @@ FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
 STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
@@ -73,7 +72,7 @@ for dbe in config["DbEntities"]:
             SO =  SO.withColumn("LineAmount",when((SO.LineAmount/SO.CurrencyFactor).isNull(),SO.LineAmount).otherwise(SO.LineAmount/SO.CurrencyFactor))\
                     .withColumn("Transaction_Type",lit("SalesOrder"))
             PDDBucket = spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblPDDBucket")
-            
+            PDDBucket = PDDBucket.filter(PDDBucket['DBName'] == DBName).filter(PDDBucket['EntityName'] == EntityName)
             DSE=spark.read.format("delta").load(STAGE2_PATH+"/"+"Masters/DSE").drop("DBName","EntityName")
             Maxoflt = PDDBucket.filter(PDDBucket['BucketName']=='<')
             MaxLimit = int(Maxoflt.select('MaxLimit').first()[0])

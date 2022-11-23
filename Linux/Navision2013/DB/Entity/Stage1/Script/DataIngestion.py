@@ -58,17 +58,9 @@ sqlCtx = SQLContext(sc)
 spark = sqlCtx.sparkSession
 import delta
 from delta.tables import *
-for dbe in ac.config["DbEntities"]:
-    select_list = ['Name','Year', 'Month']
-    res = [dbe[i] for i in select_list if i in dbe]
-    CompanyName = res[0]
-    CompanyNamewos=CompanyName.replace(" ","")
 successViewCounter = 0
 totalViews = 0
 lock = Lock()
-def chunks(l, n):
-    for i in range(0, len(l), n):
-        yield l[i:i + n]
 
 def udfBinaryToReadableFunc(byteArray):
     st = ''
@@ -83,43 +75,22 @@ schemaForMetadata = StructType([
         StructField("colname", StringType(),False),
         StructField("fullname", StringType(),False)
     ])
-def updateSchemaMetadata(dirnameInHDFS, tblNameInHDFS, tableColumns):
-    try:
-        delQuery = 'DELETE FROM stage1schema where "dbname" = \'' + dirnameInHDFS + '\' and "tblname" = \'' + tblNameInHDFS + '\''
-        con = psycopg2.connect(database=PostgresDbInfo.MetadataDB, user=PostgresDbInfo.props["user"], password=PostgresDbInfo.props["password"], host=PostgresDbInfo.Host, port=PostgresDbInfo.Port)
-        cur = con.cursor()
-        cur.execute(delQuery)
-        con.commit()
-        con.close()
-        data =[]
-        for col in tableColumns:
-            fullName = "delta.`" + STAGE1_PATH + "/ParquetData/" + tblNameInHDFS + "`"
-            data.append({'dbname':dirnameInHDFS, 'tblname':tblNameInHDFS, 'colname':col, 'fullname':fullName})
-        SchemaDataDF=spark.createDataFrame(data, schemaForMetadata)
-        SchemaDataDF.write.jdbc(url=PostgresDbInfo.MetadataDBUrl, table="stage1schema", mode='append', properties=PostgresDbInfo.props)
-    except Exception as ex:
-        print("Error in updating Schema",str(ex))
-        data =[]
-        for col in tableColumns:
-            fullName = "delta.`" + STAGE1_PATH + "/ParquetData/" + tblNameInHDFS + "`"
-            data.append({'dbname':dirnameInHDFS, 'tblname':tblNameInHDFS, 'colname':col, 'fullname':fullName})
-        SchemaDataDF=spark.createDataFrame(data, schemaForMetadata)
-        SchemaDataDF.write.jdbc(url=PostgresDbInfo.MetadataDBUrl, table="stage1schema", mode='overwrite', properties=PostgresDbInfo.props)
 def dataFrameWriterIntoHDFS(colSelector, tblFullName, sqlurl, hdfsLoc, dirnameInHDFS, tblNameInHDFS):
     tblQuery = "(SELECT "+ colSelector +" FROM ["+tblFullName+"]) AS FullWrite"
     tableDataDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=tblQuery,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=100000).load() 
     tableDataDF = tableDataDF.select([F.col(col).alias(col.replace(' ', '').replace('(', '').replace(')', '')) for col in tableDataDF.columns])
     tableDataDF.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(hdfsLoc)
-    updateSchemaMetadata(dirnameInHDFS, tblNameInHDFS, tableDataDF.columns)
+    dtTable=DeltaTable.forPath(spark, hdfsLoc)
+    dtTable.vacuum(1)
 def schemaWriterIntoHDFS(sqlurl, HDFSDatabase, SQLNAVSTRING):
     HDFS_Schema_Path = STAGE1_PATH +"/Schema"
     fullschemaQuery = "(SELECT COLUMN_NAME,DATA_TYPE,TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WITH (NOLOCK) where TABLE_NAME like '" + SQLNAVSTRING + "%') AS FullSchema"
     fullschema = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=fullschemaQuery,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=10000).load() #numPartitions="200"
     fullschema.cache()
-    fullschema.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(HDFS_Schema_Path)
+    return fullschema
 def task(entity, Table, sqlurl, hdfsLocation,Schema_DF):
     table_name = entity + Table['Table']
-    HDFS_Path =  HDFS_PATH+DIR_PATH + hdfsLocation + "/Stage1/ParquetData/" + Table['Table']
+    HDFS_Path =  HDFS_PATH+DIR_PATH +"/"+ hdfsLocation + "/Stage1/ParquetData/" + Table['Table']
     try:
         logger=Logger()
         st = dt.datetime.now()
@@ -160,90 +131,15 @@ def task(entity, Table, sqlurl, hdfsLocation,Schema_DF):
             else:
                 temp = temp + col_name_temp
 
-        tableQuery = "(SELECT top 1 "+temp+" FROM ["+table_name+"] WITH (NOLOCK)) AS GetColumns" 
-        schemaDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=tableQuery,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=10000).load()
-        schemaDF = schemaDF.select([F.col(col).alias(col.replace(' ', '').replace('(', '').replace(')', '')) for col in schemaDF.columns])
-        schemaJoiner = [x+'#'+y for x,y in schemaDF.dtypes]
-        schemaStr = "|".join(schemaJoiner)
         dataFrameWriterIntoHDFS(temp, table_name, sqlurl, HDFS_Path, hdfsLocation, Table['Table'])
-        try:
-            if 'Key' in Table and 'CheckOn' in Table:
-                try:
-                    hdfsDF = spark.read.format("delta").load(HDFS_Path)
-                    hdfsDF.cache()   
-                except Exception as e:
-                    print(table_name + ": Table is not present in HDFS, So creating in HDFS")
-                    print("Need a full write")
-                    dataFrameWriterIntoHDFS(temp, table_name, sqlurl, HDFS_Path, hdfsLocation, Table['Table'])
-                else:
-                    hdfsSchemaJoiner = [x+'#'+y for x,y in hdfsDF.dtypes]
-                    hdfsSchemaStr = "|".join(hdfsSchemaJoiner)
-                    if(schemaStr == hdfsSchemaStr):
-                        maxVal = hdfsDF.agg({Table['CheckOn']: "max"}).collect()[0][0]                            
-                        if maxVal is None:
-                            dataFrameWriterIntoHDFS(temp, table_name, sqlurl, HDFS_Path, hdfsLocation, Table['Table'])
-                            return
-                        tableQuery = "(SELECT "+temp+" FROM ["+table_name+"] WHERE CAST([" + Table['CheckOn'] + "] AS BIGINT) > " + str(maxVal) + ") AS data"
-                        tableDataDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=tableQuery,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=10000).load()
-                        tableDataDF = tableDataDF.select([F.col(col).alias(col.replace(' ', '').replace('(', '').replace(')', '')) for col in tableDataDF.columns])
-                        tableDataDF.cache()
-                        dtTable=DeltaTable.forPath(spark, HDFS_Path)
-                        dtTable.vacuum(0.1)
-                        mergeConditionsList = []
-                        keyNames = []
-                        modifiedKeyNames = []
-                        for key in Table['Key']:
-                            mergeConditionsList.append("(source." + key.replace(' ', '').replace('(', '').replace(')', '') + " = dest." + key.replace(' ', '').replace('(', '').replace(')', '') + ")")
-                            keyNames.append(("[" + key + "]"))
-                            modifiedKeyNames.append(key.replace(' ', '').replace('(', '').replace(')', ''))
-                            
-                        mergeCondition = ("" + " and ".join(mergeConditionsList) + "") if len(mergeConditionsList) > 1 else "".join(mergeConditionsList) 
-                        if tableDataDF.count() > 0:
-                            dtTable.alias("source").merge(tableDataDF.alias("dest"), mergeCondition).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()                            
-                            updateSchemaMetadata(hdfsLocation, Table['Table'], tableDataDF.columns)
-                           
-                        else:
-                            print(table_name+ ': No UpSert required')   
-                        hdfsDF = spark.read.format("delta").load(HDFS_Path)                        
-                        tempForKeys = ''                     
-                        for i in range(0,len(schema)):
-                            col_name_temp = "["+schema[i]['COLUMN_NAME']+"]"
-                           
-                            if col_name_temp in keyNames:
-                                if schema[i]['DATA_TYPE'] =='sql_variant':
-                                    tempForKeys = tempForKeys + (' , ' if len(tempForKeys) > 0 else '') + "CONVERT(varchar,"+col_name_temp+",20) as "+col_name_temp
-                                else:
-                                    tempForKeys = tempForKeys + (' , ' if len(tempForKeys) > 0 else '') + col_name_temp
-
-                        tableQuery = "(SELECT " + tempForKeys + " FROM ["+table_name+"]) AS data1"
-                        onlyIDsDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=tableQuery,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=100000).load()
-                        onlyIDsDF = onlyIDsDF.select([F.col(col).alias(col.replace(' ', '').replace('(', '').replace(')', '')) for col in onlyIDsDF.columns])                         
-                        recordsToBeDeleteDF = hdfsDF.alias("a").join(onlyIDsDF.alias("b"), modifiedKeyNames, 'left').where(onlyIDsDF[onlyIDsDF.columns[0]].isNull()).selectExpr("a.*")
-                        recordsToBeDeleteDFCount = recordsToBeDeleteDF.count()
-                        mergeConditionsList.append("(source." + incrementalLoadColumn.replace(' ', '').replace('(', '').replace(')', '') + " = dest." + incrementalLoadColumn.replace(' ', '').replace('(', '').replace(')', '') + ")")
-                        mergeConditionForDeletion = ("" + " and ".join(mergeConditionsList) + "") if len(mergeConditionsList) > 1 else "".join(mergeConditionsList) 
-                        if recordsToBeDeleteDFCount > 0:
-                            hdfsDF = DeltaTable.forPath(spark, HDFS_Path);
-                            hdfsDF.alias("source").merge(recordsToBeDeleteDF.alias("dest"), mergeConditionForDeletion).whenMatchedDelete().execute();
-                        hdfsDF = spark.read.format("delta").load(HDFS_Path) 
-                        
-                    else:
-                        dataFrameWriterIntoHDFS(temp, table_name, sqlurl, HDFS_Path, hdfsLocation, Table['Table'])
-                        
-                    hdfsDF.unpersist()
-            else:
-                dataFrameWriterIntoHDFS(temp, table_name, sqlurl, HDFS_Path, hdfsLocation, Table['Table'])### writing the tables in the hdfslocatiom
-        except Exception as ex:
-            print("For Table: " + str(Table))
-            exc_type,exc_value,exc_traceback=sys.exc_info()
-            print("Error: " + table_name, ex)
-            print("type - " + str(exc_type))
-            print("File - " + exc_traceback.tb_frame.f_code.co_filename)
-            print("Error Line No. - " + table_name + " " + str(exc_traceback.tb_lineno))
-                 
-        ts = (dt.datetime.now()-st).total_seconds()
+        
     except Exception as ex:
         print('Error in Task: ', Table, ' -> ', str(ex))
+        exc_type,exc_value,exc_traceback=sys.exc_info()
+        print("Error:",ex)
+        print("type - "+str(exc_type))
+        print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+        print("Error Line No. - "+str(exc_traceback.tb_lineno))
     
 jobs = []
 moduleName = sys.argv[1] if len(sys.argv) > 1 else ''
@@ -256,12 +152,11 @@ for entityObj in ac.config["DbEntities"]:
     entityLocation=DB+"/"+EntityName
     dbName = entityObj["DatabaseName"]
     if entityLoc==ENTITY_LOCATION_LOCAL:
-        STAGE1_PATH=HDFS_PATH+DIR_PATH+DB+"/"+EntityName+"/Stage1"
+        
+        STAGE1_PATH=HDFS_PATH+DIR_PATH+"/"+DB+"/"+EntityName+"/Stage1"
         STAGE1_Configurator_Path=STAGE1_PATH+"/ConfiguratorData"
-        hdfspath = STAGE1_PATH 
         sqlurl=ConnectionInfo.SQL_URL.format(ac.config["SourceDBConnection"]['url'], str(ac.config["SourceDBConnection"]["port"]), dbName, ac.config["SourceDBConnection"]['userName'], ac.config["SourceDBConnection"]['password'],ac.config["SourceDBConnection"]['dbtable'])
-        schemaWriterIntoHDFS(sqlurl, entityLocation, entity)
-        HDFS_Schema_DF = sqlCtx.sparkSession.read.format("delta").load(hdfspath + "/Schema")
+        HDFS_Schema_DF=schemaWriterIntoHDFS(sqlurl, entityLocation, entity)
         query = "(SELECT name from sys.tables where name like '" + entity + "%') as data"
         viewDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=query,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=10000).load()
         list_of_tables = viewDF.select(viewDF.name).rdd.flatMap(lambda x: x).collect()
@@ -269,20 +164,21 @@ for entityObj in ac.config["DbEntities"]:
             try:
                 logger=Logger()
                 table_name = entity + Table['Table']
+                CompanyNamewos=Table['Table'].replace(" ","")
                 if (len(moduleName) == 0 and table_name in list_of_tables) \
                     or (len(moduleName) > 0 and 'Modules' in Table and moduleName in Table['Modules'] and table_name in list_of_tables) \
                     or (len(moduleName) > 0 and 'Modules' not in Table and table_name in list_of_tables):
-
-                    try:             
+                    
+                    try:            
                         t = threading.Thread(target=task, args=(entity, Table, sqlurl, entityLocation,HDFS_Schema_DF))
                         jobs.append(t)
                         logger.endExecution()
                         try:
-                                IDEorBatch = sys.argv[1]
+                            IDEorBatch = sys.argv[1]
                         except Exception as e :
                             IDEorBatch = "IDLE"
 
-                        log_dict = logger.getSuccessLoggedRecord("DataIngestion_"+table_name, DBName, EntityName, viewDF.count(), len(viewDF.columns), IDEorBatch)
+                        log_dict = logger.getSuccessLoggedRecord("DataIngestion_"+table_name, DBName, EntityName, 0, 0, IDEorBatch)
                         log_df = spark.createDataFrame(log_dict, logger.getSchema())
                         log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                        
                     except Exception as ex:
@@ -298,9 +194,9 @@ for entityObj in ac.config["DbEntities"]:
                         except Exception as e :
                             IDEorBatch = "IDLE"
                         os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"") 
-                        log_dict = logger.getErrorLoggedRecord('DataIngestion'+table_name, '', '', str(ex), exc_traceback.tb_lineno, IDEorBatch)
+                        log_dict = logger.getErrorLoggedRecord('DataIngestion'+table_name, DBName, EntityName, str(ex), exc_traceback.tb_lineno, IDEorBatch)
                         log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                        log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)  
+                        log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props) 
                 else:
                     print(table_name+' table name does not exist in SQL Database')
 
@@ -317,7 +213,7 @@ for entityObj in ac.config["DbEntities"]:
                 except Exception as e :
                     IDEorBatch = "IDLE"
                 os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"")        
-                log_dict = logger.getErrorLoggedRecord('DataIngestion','', '', str(ex), exc_traceback.tb_lineno, IDEorBatch)
+                log_dict = logger.getErrorLoggedRecord('DataIngestion',DBName, EntityName, str(ex), exc_traceback.tb_lineno, IDEorBatch)
                 log_df = spark.createDataFrame(log_dict, logger.getSchema())
                 log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
         
@@ -326,7 +222,7 @@ def Configurator(ConfTab, STAGE1_Configurator_Path,DB,EntityName):
     Query="(SELECT *\
                 FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
     Configurator_Data = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()
-    
+
     Configurator_Data = Configurator_Data.select([F.col(col).alias(col.replace(" ","")) for col in Configurator_Data.columns])
     Configurator_Data = Configurator_Data.select([F.col(col).alias(col.replace("(","")) for col in Configurator_Data.columns])
     Configurator_Data = Configurator_Data.select([F.col(col).alias(col.replace(")","")) for col in Configurator_Data.columns])
@@ -345,21 +241,41 @@ for entityObj in ac.config["DbEntities"]:
     EntityName=entityLoc[3:6]
     entityLocation=DB+"/"+EntityName
     dbName = entityObj["DatabaseName"]
-    STAGE1_PATH=HDFS_PATH+DIR_PATH+DB+"/"+EntityName+"/Stage1"
+    STAGE1_PATH=HDFS_PATH+DIR_PATH+"/"+DB+"/"+EntityName+"/Stage1"
     STAGE1_Configurator_Path=STAGE1_PATH+"/ConfiguratorData/"
-    
     if entityLoc==ENTITY_LOCATION_LOCAL:
         for ConfTab in table_names_list:
-            try:                         
+            try:
+
+                CompanyNamewos=ConfTab.replace(" ","")
+                logger=Logger()                        
                 t1 = threading.Thread(target=Configurator, args=(ConfTab, STAGE1_Configurator_Path,DB,EntityName))
                 jobs.append(t1)
+                logger.endExecution()
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
+
+                log_dict = logger.getSuccessLoggedRecord("DataIngestion_"+ConfTab, DBName, EntityName, 0, 0, IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                        
             except Exception as ex:
                 exc_type,exc_value,exc_traceback=sys.exc_info()
                 print(str(ex))
                 print("type - "+str(exc_type))
                 print("File - "+exc_traceback.tb_frame.f_code.co_filename)
                 print("Error Line No. - "+str(exc_traceback.tb_lineno))
+                ex = str(ex)
+                logger.endExecution()
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
                 os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"") 
+                log_dict = logger.getErrorLoggedRecord('DataIngestion'+ConfTab, DBName, EntityName, str(ex), exc_traceback.tb_lineno, IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props) 
 #FOR MULTITHREADING
 for j in jobs:
     j.start()

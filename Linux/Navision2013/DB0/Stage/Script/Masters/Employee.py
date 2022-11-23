@@ -55,13 +55,14 @@ spark = sqlCtx.sparkSession
 fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
 ConfTab='tblCompanyName'
 try:
+    logger =Logger()
     Query="(SELECT *\
                     FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
     CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()
     CompanyDetail=CompanyDetail.filter((CompanyDetail['ActiveCompany']=='true'))
     for d in range(len(DBList)):  
         DB=DBList[d]
-        logger =Logger()
+        
         Query="(SELECT *\
                     FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
         CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()

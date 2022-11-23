@@ -21,10 +21,9 @@ FilePathSplit = Filepath.split('\\')
 DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
-STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[16]").setAppName("Location").\
+conf = SparkConf().setMaster("local[*]").setAppName("Location").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.local.dir", "/tmp/spark-temp").\
@@ -51,12 +50,11 @@ for dbe in config["DbEntities"]:
         CompanyName=dbe['Name']
         CompanyName=CompanyName.replace(" ","")
         try:
-            columns=Kockpit.TableRename("Location")      
             logger = Logger()
-            finalDF=spark.read.format("parquet").load(STAGE1_PATH+"/Location" )  
+            finalDF=spark.read.format("parquet").load(STAGE1_PATH+"/Location" )
+            finalDF = RENAME(finalDF,{"Code":"Link Location","Name":"Location Name","City":"Location City","PostCode":"Location Post Code","StateCode":"Location State Code","Country_RegionCode":"Location Country Region Code"})  
             finalDF=finalDF.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
-            finalDF = finalDF.withColumn('Link Location Key',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["Code"]))
-            finalDF = RENAME(finalDF,columns)       
+            finalDF = finalDF.withColumn('Link Location Key',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["Link Location"]))
             result_df = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])
             result_df = result_df.select([F.col(col).alias(col.replace("(","")) for col in result_df.columns])
             result_df = result_df.select([F.col(col).alias(col.replace(")","")) for col in result_df.columns])

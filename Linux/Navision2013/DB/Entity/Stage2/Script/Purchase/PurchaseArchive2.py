@@ -84,6 +84,7 @@ for dbe in config["DbEntities"]:
             Purchase = Kockpit.LJOIN(Purchase,ph,cond2)
             Purchase= Purchase.withColumn("NODays",datediff(Purchase['PromisedReceiptDate'],lit(datetime.datetime.today())))
             PDDBucket =spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblPDDBucket")
+            PDDBucket = PDDBucket.filter(PDDBucket['DBName'] == DBName).filter(PDDBucket['EntityName'] == EntityName)
             Maxoflt = PDDBucket.filter(PDDBucket['BucketName']=='<')
             MaxLimit = int(Maxoflt.select('MaxLimit').first()[0])
             Minofgt = PDDBucket.filter(PDDBucket['BucketName']=='>')

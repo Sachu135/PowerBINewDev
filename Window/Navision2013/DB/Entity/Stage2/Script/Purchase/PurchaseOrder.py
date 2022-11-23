@@ -28,7 +28,7 @@ DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
 STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[16]").setAppName("PurchaseOrder")\
+conf = SparkConf().setMaster("local[*]").setAppName("PurchaseOrder")\
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
                     set("spark.sql.shuffle.partitions",16).\
                     set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
@@ -64,6 +64,7 @@ for dbe in config["DbEntities"]:
             plDF = spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Line")
             DSE=spark.read.format("parquet").load(STAGE2_PATH+"/"+"Masters/DSE")
             PDDBucket =spark.read.format("parquet").load(STAGE1_Configurator_Path+"/tblPDDBucket")
+            PDDBucket = PDDBucket.filter(PDDBucket['DBName'] == DBName).filter(PDDBucket['EntityName'] == EntityName)
             SH = spark.read.format("parquet").load(STAGE1_PATH+"/Sales Header").select('No_','Bill-toCustomerNo_')\
                         .withColumnRenamed('No_','SalesOrderNo').withColumnRenamed('Bill-toCustomerNo_','CustomerCode')
             SL = spark.read.format("parquet").load(STAGE1_PATH+"/Sales Line").select('DocumentNo_','LineNo_','Pur_OrderNo_','POLineNo_')\

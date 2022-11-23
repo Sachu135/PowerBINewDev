@@ -13,8 +13,6 @@ from os.path import dirname, join, abspath
 import datetime as dt
 st = dt.datetime.now()
 sys.path.insert(0,'../../../..')
-# Stage2_Path =abspath(join(join(dirname(__file__), '..'),'..','..','Stage2','ParquetData','Inventory'))
-# print(Stage2_Path)
 mode = 'overwrite'
 apmode = 'append'
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..','..')))
@@ -31,21 +29,8 @@ DBName = FilePathSplit[-5]
 EntityName = FilePathSplit[-4]
 DBEntity = DBName+EntityName
 entityLocation = DBName+EntityName
-STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
-# STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
-# STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 Stage2_Path =HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData/Inventory"
-# print(Stage2_Path)
-# exec("print(Stage2_Path+chr(34))")
-#+"/tempnotdonelot"+chr(34)+")")
-# Stage2_Path+chr(34)+"/tempnotdonelot"+chr(34)
-# exec("print(Stage2_Path+"+chr(34)+"/tempnotdonelot"+chr(34)+")")
-#
-# exit()
-# print(chr(34))
-# print(Stage2_Path+chr(34)+"/tempnotdonelot"+chr(34))
-# exit()
 
 conf = SparkConf().setMaster(SPARK_MASTER).setAppName("IAP")\
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
@@ -209,7 +194,6 @@ try:
         vRows=vRows+1
         vLot=vLot+1
         if vRows%5==0:
-            exec("print(Stage2_Path+"+chr(34)+"/tempnotdonelot"+chr(34)+")")
             exec("TempNotDoneLot%d"%vRows+".write.mode(owmode).save(Stage2_Path+"+chr(34)+"/tempnotdonelot"+chr(34)+")")
             exec("TempNotDoneLot%d"%vRows+"=spark.read.parquet(Stage2_Path+"+chr(34)+"/tempnotdonelot"+chr(34)+")",globals())
         exec("TempNotDoneLot%d"%vRows+".cache()")

@@ -14,7 +14,7 @@ for folders in os.listdir(root_directory):
             if '0' in folders:
                 pass
             else:
-                DBList.append(folders )
+                DBList.insert(0,folders )
 Connection =abspath(join(join(dirname(__file__), '..'),'..','..','..',DBList[0]))
 sys.path.insert(0, Connection)
 from Configuration.Constant import *
@@ -55,13 +55,14 @@ spark = sqlCtx.sparkSession
 fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
 ConfTab='tblCompanyName'
 try:
+    logger =Logger()
     Query="(SELECT *\
                     FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
     CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()
     CompanyDetail=CompanyDetail.filter((CompanyDetail['ActiveCompany']=='true'))
     for d in range(len(DBList)):  
         DB=DBList[d]
-        logger =Logger()
+        
         Query="(SELECT *\
                     FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
         CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()
@@ -79,7 +80,7 @@ try:
                 Path = HDFS_PATH+DIR_PATH+"/"+DBName+"/"+EntityName+"/Stage2/ParquetData/Masters/PRODUCT_Dimension"
                 fe = fs.exists(sc._jvm.org.apache.hadoop.fs.Path(Path))
                 if(fe):
-                    finalDF=spark.read.format("delta").load(Path)
+                    finalDF1=spark.read.format("delta").load(Path)
                     if (d==0) & (i==0):
                         finalDF=finalDF1
                         
