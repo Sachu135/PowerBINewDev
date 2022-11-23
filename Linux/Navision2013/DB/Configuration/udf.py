@@ -13,7 +13,7 @@ from enum import Flag
 
 
 __all__ = ['JOIN','LJOIN','RJOIN','FULL','RENAME','MONTHSDF','LASTDAY','DRANGE','CONCATENATE',
-	  'UNREDUCE','UNALL','BUCKET', 'ToDF', 'ToDFWitoutPrefix', 'ToTrimmedColumnsDF', 'RenameDuplicateColumns','getSparkConfig','getSparkConfig4g']
+	  'UNREDUCE','UNALL','BUCKET', 'ToDF', 'ToDFWitoutPrefix', 'ToTrimmedColumnsDF', 'RenameDuplicateColumns']
 
 __version__ = '0.1'
 
