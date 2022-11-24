@@ -6,19 +6,19 @@ yr = 3
 owmode = 'overwrite'
 apmode = 'append'
 class PostgresDbInfo:
-    Host = "192.168.9.34"      
-    Port = "5432"
-    PostgresDB = "testing_db1e1"  
+    Host = "#PostgresDbInfo_Host"      
+    Port = "#PostgresDbInfo_Port"
+    PostgresDB = "#PostgresDbInfo_PostgresDB"  
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
-    props = {"user":"postgres", "password":"sa@123", "driver": "org.postgresql.Driver"}   
+    props = {"user":"#PostgresDbInfo_User", "password":"#PostgresDbInfo_Password", "driver": "org.postgresql.Driver"}   
     
 class ConfiguratorDbInfo:
-    Host = "4.224.250.143"     
-    Port = "5432"               
+    Host = "#ConfiguratorDbInfo_Host"     
+    Port = "#ConfiguratorDbInfo_Port"               
     PostgresDB = "Configurator" 
-    Schema = "kockpittesting"              
+    Schema = "#ConfiguratorDbInfo_Schema"              
     PostgresUrl = "jdbc:postgresql://" + Host + "/" + PostgresDB
-    props = {"user":"sachin.pandey@kockpit.in", "password":"mCS&OGtq", "driver": "org.postgresql.Driver"}
+    props = {"user":"#ConfiguratorDbInfo_User", "password":"#ConfiguratorDbInfo_Password", "driver": "org.postgresql.Driver"}
 class ConnectionInfo:
     JDBC_PARAM = "jdbc"
     SQL_SERVER_DRIVER = "com.microsoft.sqlserver.jdbc.SQLServerDriver"

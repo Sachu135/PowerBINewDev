@@ -157,6 +157,7 @@ def CONCATENATE(DF1,DF2,spark):
 	superset = spark.sql("SELECT concat(ct,c0,ct) AS c0, concat(ct,c1,ct) AS c1,concat(ct,c2,ct) AS c2 FROM Table1").na.fill('\'\'')
 	superset.createOrReplaceTempView('Table1')
 	superset = spark.sql("SELECT concat(c1,' as ',c0) AS Table1_col,concat(c2,' as ',c0) AS Table2_col FROM Table1").na.fill('\'\'')
+	
 	superset.cache()
 	rcount = superset.count()
 
@@ -173,7 +174,6 @@ def CONCATENATE(DF1,DF2,spark):
 	DF1 = spark.sql("SELECT "+vVar1+" FROM Table_DF1")
 	DF2 = spark.sql("SELECT "+vVar2+" FROM Table_DF2")
 	DF1 = DF1.unionAll(DF2)
-
 	return DF1
 
 #Function for Doing Union of any number of Dataframes With Unequal Columns
@@ -239,7 +239,6 @@ def ToDF(sqlCtx, hdfspath, entity):
 	
 def ToDFWitoutPrefix(sqlCtx, hdfspath, entity, onlySelectedColumns):
 	df = sqlCtx.sparkSession.read.format("delta").load(hdfspath + "/" + entity["Table"])
-	#df = sqlCtx.read.parquet(hdfspath + "/" + entity["Table"])
 	if onlySelectedColumns == True:
 		if 'Columns' in entity:
 			entityColumns = [col.replace(' ', '').replace('(', '').replace(')', '') for col in entity["Columns"]]
@@ -331,7 +330,6 @@ def divide(df,seperate,target_col,new_col,sqlCtx):
                     divide_flag.append("D")
         flag_df = sqlCtx.createDataFrame(divide_flag, StringType())
         flag_df = addColumnIndex(flag_df,sqlCtx)
-        
         flag_df = flag_df.withColumnRenamed('value','Divisor_Flag')
         df_divide = df_divide.withColumn(new_col, explode(df_divide.Totaling))
         df_divide = addColumnIndex(df_divide,sqlCtx)
@@ -377,23 +375,6 @@ def fm_score(x,c):
     else:
         return 5    
        
-       
-
-
-    
-
-       
-       
-       
-       
-       
-       
-       
-       
-       
-
-
-
        
 
     
