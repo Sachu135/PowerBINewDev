@@ -28,223 +28,197 @@ entityLocation = DBName+EntityName
 STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster(SPARK_MASTER).setAppName("Payables_Snapshot")\
-        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
-        .set("spark.kryoserializer.buffer.max","512m")\
-        .set("spark.cores.max","24")\
-        .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","30g")\
-        .set("spark.driver.maxResultSize","0")\
-        .set("spark.sql.debug.maxToStringFields","500")\
-        .set("spark.driver.maxResultSize","20g")\
-        .set("spark.memory.offHeap.enabled",'true')\
-        .set("spark.memory.offHeap.size","100g")\
-        .set('spark.scheduler.mode', 'FAIR')\
-        .set("spark.sql.broadcastTimeout", "36000")\
-        .set("spark.network.timeout", 10000000)\
-        .set("spark.sql.codegen.wholeStage","false")\
-        .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
-        .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
-        .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
-        .set("spark.databricks.delta.vacuum.parallelDelete.enabled",'true')\
-        .set("spark.databricks.delta.retentionDurationCheck.enabled",'false')\
-        .set('spark.hadoop.mapreduce.output.fileoutputformat.compress', 'false')\
-        .set("spark.rapids.sql.enabled", True)\
-        .set("spark.sql.legacy.parquet.int96RebaseModeInWrite", "CORRECTED")
-sc = SparkContext(conf = conf)
-sqlCtx = SQLContext(sc)
-spark = sqlCtx.sparkSession
-import delta
-from delta.tables import *
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
-cdate = datetime.datetime.now().strftime('%Y-%m-%d')
-for dbe in config["DbEntities"]:
-    if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
-        CompanyName=dbe['Name']
-        CompanyName=CompanyName.replace(" ","")
-        try:
-            logger = Logger()
-            Company =spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblCompanyName")
-            Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
-            df = Company.select("StartDate","EndDate")
-            Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
-           
-            if datetime.date.today().month>int(MnSt)-1:
-                    UIStartYr=datetime.date.today().year-int(yr)+1
-            else:
-                    UIStartYr=datetime.date.today().year-int(yr)
-            UIStartDate=datetime.date(UIStartYr,int(MnSt),1)
-            UIStartDate=max(Calendar_StartDate,UIStartDate)
-            VLE = spark.read.format("delta").load(STAGE1_PATH+"/Vendor Ledger Entry")
-            DVLE = spark.read.format("delta").load(STAGE1_PATH+"/Detailed Vendor Ledg_ Entry")
-            DVLE = DVLE.withColumnRenamed('DocumentType','DVLE_Document_Type')
-            VPG = spark.read.format("delta").load(STAGE1_PATH+"/Vendor Posting Group")
-            PIH = spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Inv_ Header")
-            pih = PIH.select('No_','PaymentTermsCode').withColumnRenamed('No_','PIH_No')
-            DSE=spark.read.format("delta").load(STAGE2_PATH+"/"+"Masters/DSE").drop("DBName","EntityName")
-            vle = VLE.withColumn("LinkVendor",when(col("VendorNo_")=='',"NA").otherwise(col("VendorNo_")))\
-                     .withColumn("LinkPurchaser",when(col("PurchaserCode")=='',"NA").otherwise(col("PurchaserCode")))\
-                     .withColumn("Due_Date",to_date(col("DueDate")))
-            vle = vle.withColumnRenamed("DimensionSetID","DimSetID").withColumnRenamed("EntryNo_","VLE_No")\
-                     .withColumnRenamed("DocumentNo_","VLE_Document_No").withColumnRenamed("Description","VLE_Description")\
-                 .withColumnRenamed("VendorPostingGroup","Vendor_Posting_Group").withColumnRenamed("ExternalDocumentNo_","ExternalDocumentNo")\
-                 .withColumnRenamed("PostingDate","VLE_Posting_Date").withColumnRenamed("PostingDate","LinkDate")
-            
-            vle = vle.join(pih,vle["VLE_Document_No"]==pih["PIH_No"],'left')
-            current_month = datetime.datetime.strptime(cdate,"%Y-%m-%d")
-            current_month = str(current_month.year)+str(current_month.month)
-            dvle = DVLE.filter(year(col("PostingDate"))!='1753')
-            dvle = dvle.withColumn('AmountLCY',dvle['AmountLCY'].cast('decimal(20,4)'))
-            dvle = dvle.withColumn("Original_Amount",when(col("EntryType")==1,col("AmountLCY")*(-1)).otherwise(col("AmountLCY")*(-1)))\
-                       .withColumn("DVLE_Posting_Date",to_date(col("PostingDate")))\
-                       .withColumn("link_month",concat(year(dvle.PostingDate),month(dvle.PostingDate)))\
-                       .withColumn("Transaction_Type",lit("VLE Entry"))\
-                       .withColumn("Remaining_Amount",col("AmountLCY")*(-1)).drop('DBName','EntityName')
-            dvle = dvle.withColumnRenamed("VendorLedgerEntryNo_","DVVLE_No").withColumnRenamed("DocumentNo_","DVLE_Document_No")
-            
-            dvle = dvle.withColumn("DVLE_Monthend_Posting_Date",when(dvle.link_month==current_month, cdate).otherwise(last_day(dvle.PostingDate)))
-            dvle = dvle.drop('link_month').drop('DocumentDate','CurrencyCode')
-            cond = [vle.VLE_No==dvle.DVVLE_No]
-            df = RJOIN(vle,dvle,cond)
-            df1 = VPG.withColumnRenamed("Code","Vendor_Posting_Group").withColumnRenamed("PayablesAccount","GLAccount")
-           
-            cond = [df.Vendor_Posting_Group == df1.Vendor_Posting_Group]
-           
-            df2 = LJOIN(df,df1,cond)
-            GLRange=spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblGLAccountMapping")
-            GLRange = GLRange.filter(GLRange['DBName'] == DBName ).filter(col('EntityName') == EntityName).filter(GLRange['GLRangeCategory']== 'Vendor')
-            GLRange = GLRange.withColumnRenamed("FromGLCode", "FromGL")
-            GLRange = GLRange.withColumnRenamed("ToGLCode", "ToGL")
-            GLRange = GLRange.withColumnRenamed("GLRangeCategory","GLCategory")
-            GLRange = GLRange.select("GLCategory","FromGL","ToGL")
-            
-            Range='1=1'
-            NoOfRows=GLRange.count()
-            for i in range(0,NoOfRows):
-                if i==0:
-                        Range="(GLAccount>=%s"%GLRange.select(GLRange.FromGL).collect()[0]["FromGL"]+\
-                        " AND GLAccount<=%s"%GLRange.select(GLRange.ToGL).collect()[0]["ToGL"]+')'
+sqlCtx,spark=getSparkConfig(SPARK_MASTER, "Stage2:Purchase-Payables_Snapshot")
+def purchase_Payables_Snapshot():
+    cdate = datetime.datetime.now().strftime('%Y-%m-%d')
+    for dbe in config["DbEntities"]:
+        if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
+            CompanyName=dbe['Name']
+            CompanyName=CompanyName.replace(" ","")
+            try:
+                logger = Logger()
+                Company =spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblCompanyName")
+                Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
+                df = Company.select("StartDate","EndDate")
+                Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
+                Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
+               
+                if datetime.date.today().month>int(MnSt)-1:
+                        UIStartYr=datetime.date.today().year-int(yr)+1
                 else:
-                        Range=Range+" OR (GLAccount>=%s"%GLRange.select(GLRange.FromGL).collect()[i]["FromGL"]+\
-                        " AND GLAccount<=%s"%GLRange.select(GLRange.ToGL).collect()[i]["ToGL"]+')'
-            df2.createOrReplaceTempView('temptable')
-            df2=sqlCtx.sql("SELECT * FROM temptable Where ("+Range+")")
-
-            df4 = df2.groupBy('VLE_No').agg({'Remaining_Amount':'sum'}).withColumnRenamed('sum(Remaining_Amount)','Remaining_Amount').filter('Remaining_Amount!=0')\
-            .select('VLE_No','Remaining_Amount').withColumnRenamed('VLE_No','VLENo')
-            df_DVLE_Temp1=df.select(df2.VLE_No,df2.VLE_Document_No,df2.DVLE_Monthend_Posting_Date)
-            cond1 = [df_DVLE_Temp1.VLE_No==df4.VLENo]
-            Df_min_max_date=LJOIN(df_DVLE_Temp1,df4,cond1)
-            Df_min_max_date=Df_min_max_date.select(df_DVLE_Temp1.VLE_No,df_DVLE_Temp1.VLE_Document_No,df_DVLE_Temp1.DVLE_Monthend_Posting_Date,df4.Remaining_Amount).distinct()
-            Df_min_max_date=Df_min_max_date.select('VLE_No','VLE_Document_No','DVLE_Monthend_Posting_Date','Remaining_Amount')
-            sqldf = Df_min_max_date.withColumn('Max_Monthend',when(Df_min_max_date['Remaining_Amount']!=0, datetime.datetime.now().date().replace(month=12, day=31))\
-                        .otherwise(Df_min_max_date['DVLE_Monthend_Posting_Date']))
-            sqldf = sqldf.groupby('VLE_No','VLE_Document_No','Remaining_Amount').agg({'DVLE_Monthend_Posting_Date':'min','Max_Monthend':'max'})\
-                                    .withColumnRenamed('VLE_No','TempVLE_No').withColumnRenamed('min(DVLE_Monthend_Posting_Date)','Min_Monthend')\
-                                    .withColumnRenamed('max(Max_Monthend)','Max_Monthend')
-            df = Company.select("StartDate","EndDate")
-            Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
-            if datetime.date.today().month>int(MnSt)-1:
-                UIStartYr=datetime.date.today().year-int(yr)+1
-            else:
-                UIStartYr=datetime.date.today().year-int(yr)
-            UIStartDate=datetime.date(UIStartYr,int(MnSt),1)
-            
-            Calendar_EndDate_conf=df.select(df.EndDate).collect()[0]["EndDate"]
-            Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%Y-%m-%d").date()
-            Calendar_EndDate_file=datetime.datetime.strptime(cdate,"%Y-%m-%d").date()
-            Calendar_EndDate=min(Calendar_EndDate_conf,Calendar_EndDate_file)
-            def last_day_of_month(date):
-                    if date.month == 12:
-                            return date.replace(day=31)
-                    return date.replace(month=date.month+1, day=1) - datetime.timedelta(days=1)
-            
-            def daterange(start_date, end_date):
-                    for n in range(int ((end_date - start_date).days)):
-                            yield start_date + timedelta(n)
-            
-            data =[]
-            for single_date in daterange(UIStartDate, Calendar_EndDate+timedelta(days=1)):
-                data.append({'Link_date':single_date})
-            
-            schema = StructType([
-                StructField("Link_date", DateType(),True)
-            ])
-            records=spark.createDataFrame(data,schema)
-            records=records.select(last_day(records.Link_date).alias('Link_date')).distinct().sort('Link_date')
-            records=records.withColumn("Link_date", \
-                          when(records["Link_date"] == last_day_of_month(Calendar_EndDate_file), Calendar_EndDate_file).otherwise(records["Link_date"]))
-            
-            sqldf = JOIN(sqldf,records)
-            sqldf = sqldf.select('TempVLE_No','VLE_Document_No','Min_MonthEnd','Max_MonthEnd','Link_date')
-            sqldf=sqldf.filter(sqldf['Link_date']<= sqldf['Max_MonthEnd']).filter(sqldf['Link_date']>= sqldf['Min_MonthEnd']).select('TempVLE_No','VLE_Document_No','Link_date').withColumnRenamed('Link_date','DVLE_MonthEnd')
-            VLE_DVLE_Joined = df2.select('DimSetID','VLE_No','DVLE_Posting_Date','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType','Remaining_Amount','Original_Amount')
-            cond = [sqldf.TempVLE_No == VLE_DVLE_Joined.VLE_No]
-            APsnapshots = LJOIN(sqldf,VLE_DVLE_Joined,cond)
-            APsnapshots=APsnapshots.select('DimSetID','TempVLE_No','DVLE_Posting_Date','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType','Remaining_Amount','Original_Amount','VLE_Document_No','DVLE_MonthEnd').filter(APsnapshots['DVLE_Posting_Date']<= APsnapshots['DVLE_MonthEnd'])
-            APsnapshots = APsnapshots.groupBy('DimSetID','TempVLE_No','VLE_Document_No','DVLE_MonthEnd','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType').agg({'Remaining_Amount':'sum','Original_Amount':'sum'}).withColumnRenamed('sum(Remaining_Amount)','Remaining_Amount').withColumnRenamed('sum(Original_Amount)','Original_Amount')
-            VLE_DVLE_Joined = df2.select('VLE_No','LinkVendor','VLE_Posting_Date','LinkPurchaser').distinct()
-            
-            cond = [APsnapshots.TempVLE_No == VLE_DVLE_Joined.VLE_No]
-            APsnapshots = LJOIN(APsnapshots,VLE_DVLE_Joined,cond)
-           
-            APsnapshots = APsnapshots.withColumn('Due_Date',APsnapshots['Due_Date'].cast('date'))\
-                                .withColumn('DVLE_MonthEnd',APsnapshots['DVLE_MonthEnd'].cast('date'))\
-                                .withColumn('VLE_Posting_Date',APsnapshots['VLE_Posting_Date'].cast('date'))
-            APsnapshots = APsnapshots.withColumn("Document_No",APsnapshots['VLE_Document_No'])\
-                                .withColumn("Link_Date",APsnapshots['DVLE_MonthEnd'].cast('date'))\
-                                .withColumn("NOD_AP_Due_Date",datediff(APsnapshots['DVLE_MonthEnd'],APsnapshots['Due_Date']))\
-                                .withColumn("NOD_AP_Posting_Date",datediff(APsnapshots['DVLE_MonthEnd'],APsnapshots['VLE_Posting_Date']))\
-                                .withColumn("NOD_AP_Document_Date",datediff(APsnapshots['DVLE_MonthEnd'],APsnapshots['DocumentDate']))\
-                                .withColumn("TransactionType",lit('VLE_Entry'))\
-                                .withColumn("AP_Type",when(APsnapshots['Remaining_Amount']<0, lit('Adv/UnAdj')).otherwise(lit('AP')))
-            
-            APsnapshots.cache()
-            print(APsnapshots.count())
-            APBucket=spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblAPBucket").drop("DBName","EntityName")
-            Maxoflt = APBucket.filter(APBucket['BucketName']=='<')
-            MaxLimit = int(Maxoflt.select('UpperLimit').first()[0])
-            Minofgt = APBucket.filter(APBucket['BucketName']=='>')
-            MinLimit = int(Minofgt.select('LowerLimit').first()[0])
-  
-            APsnapshots = APsnapshots.join(APBucket,APsnapshots.NOD_AP_Posting_Date == APBucket.Nod,'left').drop('ID','UpperLimit','LowerLimit')
-            APsnapshots=APsnapshots.withColumn('BucketName',when(APsnapshots.NOD_AP_Posting_Date>=MinLimit,lit(str(MinLimit)+'+')).otherwise(APsnapshots.BucketName))\
-                        .withColumn('Nod',when(APsnapshots.NOD_AP_Posting_Date>=MinLimit,APsnapshots.NOD_AP_Posting_Date).otherwise(APsnapshots.Nod))
-            APsnapshots=APsnapshots.withColumn('BucketName',when(APsnapshots.NOD_AP_Posting_Date<=(MaxLimit),lit("Not Due")).otherwise(APsnapshots.BucketName))\
-                        .withColumn('Nod',when(APsnapshots.NOD_AP_Posting_Date<=(MaxLimit), APsnapshots.NOD_AP_Posting_Date).otherwise(APsnapshots.Nod)) 
-            APsnapshots = APsnapshots.withColumnRenamed('DimSetID','DimensionSetID')
-            finalDF = APsnapshots.join(DSE,"DimensionSetID",'left')
-            finalDF = RenameDuplicateColumns(finalDF)
-            finalDF.cache()
-            print(finalDF.count())
-            finalDF .coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Payables_Snapshot")
-            logger.endExecution()
-            
-            try:
-                IDEorBatch = sys.argv[1]
-            except Exception as e :
-                IDEorBatch = "IDLE"
-            log_dict = logger.getSuccessLoggedRecord("Purchase.Payables_Snapshot", DBName, EntityName, finalDF.count(), len(finalDF.columns), IDEorBatch)
-            log_df = spark.createDataFrame(log_dict, logger.getSchema())
-            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-        except Exception as ex:
-            exc_type,exc_value,exc_traceback=sys.exc_info()
-            print("Error:",ex)
-            print("type - "+str(exc_type))
-            print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-            print("Error Line No. - "+str(exc_traceback.tb_lineno))
-            logger.endExecution()
-            try:
-                IDEorBatch = sys.argv[1]
-            except Exception as e :
-                IDEorBatch = "IDLE"
-            os.system("spark-submit "+Kockpit_Path+"/Email.py 1 Payables_Snapshot '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+" ")
-            log_dict = logger.getErrorLoggedRecord('Purchase.Payables_Snapshot', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
-            log_df = spark.createDataFrame(log_dict, logger.getSchema())
-            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-print('purchases_Payable_Snapshot completed: ' + str((dt.datetime.now()-st).total_seconds()))
-
-
+                        UIStartYr=datetime.date.today().year-int(yr)
+                UIStartDate=datetime.date(UIStartYr,int(MnSt),1)
+                UIStartDate=max(Calendar_StartDate,UIStartDate)
+                VLE = spark.read.format("delta").load(STAGE1_PATH+"/Vendor Ledger Entry")
+                DVLE = spark.read.format("delta").load(STAGE1_PATH+"/Detailed Vendor Ledg_ Entry")
+                DVLE = DVLE.withColumnRenamed('DocumentType','DVLE_Document_Type')
+                VPG = spark.read.format("delta").load(STAGE1_PATH+"/Vendor Posting Group")
+                PIH = spark.read.format("delta").load(STAGE1_PATH+"/Purch_ Inv_ Header")
+                pih = PIH.select('No_','PaymentTermsCode').withColumnRenamed('No_','PIH_No')
+                DSE=spark.read.format("delta").load(STAGE2_PATH+"/"+"Masters/DSE").drop("DBName","EntityName")
+                vle = VLE.withColumn("LinkVendor",when(col("VendorNo_")=='',"NA").otherwise(col("VendorNo_")))\
+                         .withColumn("LinkPurchaser",when(col("PurchaserCode")=='',"NA").otherwise(col("PurchaserCode")))\
+                         .withColumn("Due_Date",to_date(col("DueDate")))
+                vle = vle.withColumnRenamed("DimensionSetID","DimSetID").withColumnRenamed("EntryNo_","VLE_No")\
+                         .withColumnRenamed("DocumentNo_","VLE_Document_No").withColumnRenamed("Description","VLE_Description")\
+                     .withColumnRenamed("VendorPostingGroup","Vendor_Posting_Group").withColumnRenamed("ExternalDocumentNo_","ExternalDocumentNo")\
+                     .withColumnRenamed("PostingDate","VLE_Posting_Date").withColumnRenamed("PostingDate","LinkDate")
+                
+                vle = vle.join(pih,vle["VLE_Document_No"]==pih["PIH_No"],'left')
+                current_month = datetime.datetime.strptime(cdate,"%Y-%m-%d")
+                current_month = str(current_month.year)+str(current_month.month)
+                dvle = DVLE.filter(year(col("PostingDate"))!='1753')
+                dvle = dvle.withColumn('AmountLCY',dvle['AmountLCY'].cast('decimal(20,4)'))
+                dvle = dvle.withColumn("Original_Amount",when(col("EntryType")==1,col("AmountLCY")*(-1)).otherwise(col("AmountLCY")*(-1)))\
+                           .withColumn("DVLE_Posting_Date",to_date(col("PostingDate")))\
+                           .withColumn("link_month",concat(year(dvle.PostingDate),month(dvle.PostingDate)))\
+                           .withColumn("Transaction_Type",lit("VLE Entry"))\
+                           .withColumn("Remaining_Amount",col("AmountLCY")*(-1)).drop('DBName','EntityName')
+                dvle = dvle.withColumnRenamed("VendorLedgerEntryNo_","DVVLE_No").withColumnRenamed("DocumentNo_","DVLE_Document_No")
+                
+                dvle = dvle.withColumn("DVLE_Monthend_Posting_Date",when(dvle.link_month==current_month, cdate).otherwise(last_day(dvle.PostingDate)))
+                dvle = dvle.drop('link_month').drop('DocumentDate','CurrencyCode')
+                cond = [vle.VLE_No==dvle.DVVLE_No]
+                df = RJOIN(vle,dvle,cond)
+                df1 = VPG.withColumnRenamed("Code","Vendor_Posting_Group").withColumnRenamed("PayablesAccount","GLAccount")
+               
+                cond = [df.Vendor_Posting_Group == df1.Vendor_Posting_Group]
+               
+                df2 = LJOIN(df,df1,cond)
+                GLRange=spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblGLAccountMapping")
+                GLRange = GLRange.filter(GLRange['DBName'] == DBName ).filter(col('EntityName') == EntityName).filter(GLRange['GLRangeCategory']== 'Vendor')
+                GLRange = GLRange.withColumnRenamed("FromGLCode", "FromGL")
+                GLRange = GLRange.withColumnRenamed("ToGLCode", "ToGL")
+                GLRange = GLRange.withColumnRenamed("GLRangeCategory","GLCategory")
+                GLRange = GLRange.select("GLCategory","FromGL","ToGL")
+                
+                Range='1=1'
+                NoOfRows=GLRange.count()
+                for i in range(0,NoOfRows):
+                    if i==0:
+                            Range="(GLAccount>=%s"%GLRange.select(GLRange.FromGL).collect()[0]["FromGL"]+\
+                            " AND GLAccount<=%s"%GLRange.select(GLRange.ToGL).collect()[0]["ToGL"]+')'
+                    else:
+                            Range=Range+" OR (GLAccount>=%s"%GLRange.select(GLRange.FromGL).collect()[i]["FromGL"]+\
+                            " AND GLAccount<=%s"%GLRange.select(GLRange.ToGL).collect()[i]["ToGL"]+')'
+                df2.createOrReplaceTempView('temptable')
+                df2=sqlCtx.sql("SELECT * FROM temptable Where ("+Range+")")
     
+                df4 = df2.groupBy('VLE_No').agg({'Remaining_Amount':'sum'}).withColumnRenamed('sum(Remaining_Amount)','Remaining_Amount').filter('Remaining_Amount!=0')\
+                .select('VLE_No','Remaining_Amount').withColumnRenamed('VLE_No','VLENo')
+                df_DVLE_Temp1=df.select(df2.VLE_No,df2.VLE_Document_No,df2.DVLE_Monthend_Posting_Date)
+                cond1 = [df_DVLE_Temp1.VLE_No==df4.VLENo]
+                Df_min_max_date=LJOIN(df_DVLE_Temp1,df4,cond1)
+                Df_min_max_date=Df_min_max_date.select(df_DVLE_Temp1.VLE_No,df_DVLE_Temp1.VLE_Document_No,df_DVLE_Temp1.DVLE_Monthend_Posting_Date,df4.Remaining_Amount).distinct()
+                Df_min_max_date=Df_min_max_date.select('VLE_No','VLE_Document_No','DVLE_Monthend_Posting_Date','Remaining_Amount')
+                sqldf = Df_min_max_date.withColumn('Max_Monthend',when(Df_min_max_date['Remaining_Amount']!=0, datetime.datetime.now().date().replace(month=12, day=31))\
+                            .otherwise(Df_min_max_date['DVLE_Monthend_Posting_Date']))
+                sqldf = sqldf.groupby('VLE_No','VLE_Document_No','Remaining_Amount').agg({'DVLE_Monthend_Posting_Date':'min','Max_Monthend':'max'})\
+                                        .withColumnRenamed('VLE_No','TempVLE_No').withColumnRenamed('min(DVLE_Monthend_Posting_Date)','Min_Monthend')\
+                                        .withColumnRenamed('max(Max_Monthend)','Max_Monthend')
+                df = Company.select("StartDate","EndDate")
+                Calendar_StartDate = df.select(df.StartDate).collect()[0]["StartDate"]
+                Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
+                if datetime.date.today().month>int(MnSt)-1:
+                    UIStartYr=datetime.date.today().year-int(yr)+1
+                else:
+                    UIStartYr=datetime.date.today().year-int(yr)
+                UIStartDate=datetime.date(UIStartYr,int(MnSt),1)
+                
+                Calendar_EndDate_conf=df.select(df.EndDate).collect()[0]["EndDate"]
+                Calendar_EndDate_conf = datetime.datetime.strptime(Calendar_EndDate_conf,"%Y-%m-%d").date()
+                Calendar_EndDate_file=datetime.datetime.strptime(cdate,"%Y-%m-%d").date()
+                Calendar_EndDate=min(Calendar_EndDate_conf,Calendar_EndDate_file)
+                def last_day_of_month(date):
+                        if date.month == 12:
+                                return date.replace(day=31)
+                        return date.replace(month=date.month+1, day=1) - datetime.timedelta(days=1)
+                
+                def daterange(start_date, end_date):
+                        for n in range(int ((end_date - start_date).days)):
+                                yield start_date + timedelta(n)
+                
+                data =[]
+                for single_date in daterange(UIStartDate, Calendar_EndDate+timedelta(days=1)):
+                    data.append({'Link_date':single_date})
+                
+                schema = StructType([
+                    StructField("Link_date", DateType(),True)
+                ])
+                records=spark.createDataFrame(data,schema)
+                records=records.select(last_day(records.Link_date).alias('Link_date')).distinct().sort('Link_date')
+                records=records.withColumn("Link_date", \
+                              when(records["Link_date"] == last_day_of_month(Calendar_EndDate_file), Calendar_EndDate_file).otherwise(records["Link_date"]))
+                
+                sqldf = JOIN(sqldf,records)
+                sqldf = sqldf.select('TempVLE_No','VLE_Document_No','Min_MonthEnd','Max_MonthEnd','Link_date')
+                sqldf=sqldf.filter(sqldf['Link_date']<= sqldf['Max_MonthEnd']).filter(sqldf['Link_date']>= sqldf['Min_MonthEnd']).select('TempVLE_No','VLE_Document_No','Link_date').withColumnRenamed('Link_date','DVLE_MonthEnd')
+                VLE_DVLE_Joined = df2.select('DimSetID','VLE_No','DVLE_Posting_Date','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType','Remaining_Amount','Original_Amount')
+                cond = [sqldf.TempVLE_No == VLE_DVLE_Joined.VLE_No]
+                APsnapshots = LJOIN(sqldf,VLE_DVLE_Joined,cond)
+                APsnapshots=APsnapshots.select('DimSetID','TempVLE_No','DVLE_Posting_Date','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType','Remaining_Amount','Original_Amount','VLE_Document_No','DVLE_MonthEnd').filter(APsnapshots['DVLE_Posting_Date']<= APsnapshots['DVLE_MonthEnd'])
+                APsnapshots = APsnapshots.groupBy('DimSetID','TempVLE_No','VLE_Document_No','DVLE_MonthEnd','DocumentDate','Due_Date','PaymentTermsCode','CurrencyCode','ExternalDocumentNo','DocumentType').agg({'Remaining_Amount':'sum','Original_Amount':'sum'}).withColumnRenamed('sum(Remaining_Amount)','Remaining_Amount').withColumnRenamed('sum(Original_Amount)','Original_Amount')
+                VLE_DVLE_Joined = df2.select('VLE_No','LinkVendor','VLE_Posting_Date','LinkPurchaser').distinct()
+                
+                cond = [APsnapshots.TempVLE_No == VLE_DVLE_Joined.VLE_No]
+                APsnapshots = LJOIN(APsnapshots,VLE_DVLE_Joined,cond)
+               
+                APsnapshots = APsnapshots.withColumn('Due_Date',APsnapshots['Due_Date'].cast('date'))\
+                                    .withColumn('DVLE_MonthEnd',APsnapshots['DVLE_MonthEnd'].cast('date'))\
+                                    .withColumn('VLE_Posting_Date',APsnapshots['VLE_Posting_Date'].cast('date'))
+                APsnapshots = APsnapshots.withColumn("Document_No",APsnapshots['VLE_Document_No'])\
+                                    .withColumn("Link_Date",APsnapshots['DVLE_MonthEnd'].cast('date'))\
+                                    .withColumn("NOD_AP_Due_Date",datediff(APsnapshots['DVLE_MonthEnd'],APsnapshots['Due_Date']))\
+                                    .withColumn("NOD_AP_Posting_Date",datediff(APsnapshots['DVLE_MonthEnd'],APsnapshots['VLE_Posting_Date']))\
+                                    .withColumn("NOD_AP_Document_Date",datediff(APsnapshots['DVLE_MonthEnd'],APsnapshots['DocumentDate']))\
+                                    .withColumn("TransactionType",lit('VLE_Entry'))\
+                                    .withColumn("AP_Type",when(APsnapshots['Remaining_Amount']<0, lit('Adv/UnAdj')).otherwise(lit('AP')))
+                
+                APsnapshots.cache()
+                print(APsnapshots.count())
+                APBucket=spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblAPBucket").drop("DBName","EntityName")
+                Maxoflt = APBucket.filter(APBucket['BucketName']=='<')
+                MaxLimit = int(Maxoflt.select('UpperLimit').first()[0])
+                Minofgt = APBucket.filter(APBucket['BucketName']=='>')
+                MinLimit = int(Minofgt.select('LowerLimit').first()[0])
+      
+                APsnapshots = APsnapshots.join(APBucket,APsnapshots.NOD_AP_Posting_Date == APBucket.Nod,'left').drop('ID','UpperLimit','LowerLimit')
+                APsnapshots=APsnapshots.withColumn('BucketName',when(APsnapshots.NOD_AP_Posting_Date>=MinLimit,lit(str(MinLimit)+'+')).otherwise(APsnapshots.BucketName))\
+                            .withColumn('Nod',when(APsnapshots.NOD_AP_Posting_Date>=MinLimit,APsnapshots.NOD_AP_Posting_Date).otherwise(APsnapshots.Nod))
+                APsnapshots=APsnapshots.withColumn('BucketName',when(APsnapshots.NOD_AP_Posting_Date<=(MaxLimit),lit("Not Due")).otherwise(APsnapshots.BucketName))\
+                            .withColumn('Nod',when(APsnapshots.NOD_AP_Posting_Date<=(MaxLimit), APsnapshots.NOD_AP_Posting_Date).otherwise(APsnapshots.Nod)) 
+                APsnapshots = APsnapshots.withColumnRenamed('DimSetID','DimensionSetID')
+                finalDF = APsnapshots.join(DSE,"DimensionSetID",'left')
+                finalDF = RenameDuplicateColumns(finalDF)
+                finalDF.cache()
+                print(finalDF.count())
+                finalDF .coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Payables_Snapshot")
+                logger.endExecution()
+                
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
+                log_dict = logger.getSuccessLoggedRecord("Purchase.Payables_Snapshot", DBName, EntityName, finalDF.count(), len(finalDF.columns), IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+            except Exception as ex:
+                exc_type,exc_value,exc_traceback=sys.exc_info()
+                print("Error:",ex)
+                print("type - "+str(exc_type))
+                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+                print("Error Line No. - "+str(exc_traceback.tb_lineno))
+                logger.endExecution()
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
+                os.system("spark-submit "+Kockpit_Path+"/Email.py 1 Payables_Snapshot '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+" ")
+                log_dict = logger.getErrorLoggedRecord('Purchase.Payables_Snapshot', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+    print('purchases_Payable_Snapshot completed: ' + str((dt.datetime.now()-st).total_seconds()))
+if __name__ == "__main__":
+    purchase_Payables_Snapshot()    
+    
+        

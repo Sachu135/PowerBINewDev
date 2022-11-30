@@ -28,32 +28,9 @@ Stage1_Path = abspath(join(join(dirname(__file__),'..')))
 STAGE1_Configurator_Path=Stage1_Path+"/ConfiguratorData/"
 st = dt.datetime.now()
 from Configuration import AppConfig as ac
+from Configuration.udf import *
 from Configuration.Constant import *
-conf = SparkConf().setMaster("local[*]").setAppName("DataIngestion").\
-                    set("spark.sql.shuffle.partitions",16).\
-                    set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
-                    set("spark.local.dir", "/tmp/spark-temp").\
-                    set("spark.driver.memory","30g").\
-                    set("spark.executor.memory","30g").\
-                    set("spark.driver.cores",16).\
-                    set("spark.driver.maxResultSize","0").\
-                    set("spark.sql.debug.maxToStringFields", "1000").\
-                    set("spark.executor.instances", "20").\
-                    set('spark.scheduler.mode', 'FAIR').\
-                    set("spark.sql.broadcastTimeout", "36000").\
-                    set("spark.network.timeout", 10000000).\
-                    set("spark.sql.legacy.parquet.datetimeRebaseModeInWrite", "LEGACY").\
-                    set("spark.sql.legacy.parquet.datetimeRebaseModeInRead", "LEGACY").\
-                    set("spark.sql.legacy.parquet.datetimeRebaseModeInRead", "CORRECTED").\
-                    set("spark.sql.legacy.timeParserPolicy","LEGACY").\
-                    set("spark.sql.legacy.parquet.int96RebaseModeInWrite","LEGACY").\
-                    set("spark.sql.legacy.parquet.int96RebaseModeInWrite","CORRECTED")
-
-
-sc = SparkContext(conf = conf)
-sqlCtx = SQLContext(sc)
-spark = sqlCtx.sparkSession
-
+sqlCtx, spark = getSparkConfig("local[*]", "Stage1:DataIngestion")
 logging.basicConfig(filename='error.log')
 successViewCounter = 0
 totalViews = 0
@@ -144,7 +121,7 @@ def task(entity, Table, sqlurl, hdfsLocation,Schema_DF):
         print('Error in Task: ', Table, ' -> ', str(ex))
         logger.endExecution()
         try:
-            IDEorBatch = sys.argv[1]
+            IDEorBatch = sys.argv[2]
         except Exception as e :
             IDEorBatch = "IDLE"
         os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"") 
@@ -152,81 +129,84 @@ def task(entity, Table, sqlurl, hdfsLocation,Schema_DF):
         log_df = spark.createDataFrame(log_dict, logger.getSchema())
         log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props) 
 jobs = []
-moduleName = sys.argv[1] if len(sys.argv) > 1 else ''
+moduleName = sys.argv[2] if len(sys.argv) > 2 else ''
 
 
-       
-for entityObj in ac.config["DbEntities"]:
-    entity = entityObj["Name"]
-    entityLoc = entityObj["Location"]
-    DB=entityLoc[0:3]
-    EntityName=entityLoc[3:6]
-    entityLocation=DB+"/"+EntityName
-    dbName = entityObj["DatabaseName"]
-    if entityLoc==ENTITY_LOCATION_LOCAL:
+def full_reload(): 
+   
+    for entityObj in ac.config["DbEntities"]:
+        entity = entityObj["Name"]
+        entityLoc = entityObj["Location"]
+        DB=entityLoc[0:3]
+        EntityName=entityLoc[3:6]
+        entityLocation=DB+"/"+EntityName
+        dbName = entityObj["DatabaseName"]
         
-        STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/Stage1"
-        sqlurl=ConnectionInfo.SQL_URL.format(ac.config["SourceDBConnection"]['url'], str(ac.config["SourceDBConnection"]["port"]), dbName, ac.config["SourceDBConnection"]['userName'],ac.config["SourceDBConnection"]['password'],ac.config["SourceDBConnection"]['dbtable'])
-        HDFS_Schema_DF=schemaWriterIntoHDFS(sqlurl, entityLocation, entity)
-        query = "(SELECT name from sys.tables where name like '" + entity + "%') as data"
-        viewDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=query,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=10000).load()
-        list_of_tables = viewDF.select(viewDF.name).rdd.flatMap(lambda x: x).collect()
-        for Table in ac.config["TablesToIngest"]:
-            try:
-                logger=Logger()
-                table_name = entity + Table['Table']
-                CompanyNamewos=Table['Table'].replace(" ","")
-                if (len(moduleName) == 0 and table_name in list_of_tables) \
-                    or (len(moduleName) > 0 and 'Modules' in Table and moduleName in Table['Modules'] and table_name in list_of_tables) \
-                    or (len(moduleName) > 0 and 'Modules' not in Table and table_name in list_of_tables):
-                    
-                    try:             
-                        t = threading.Thread(target=task, args=(entity, Table, sqlurl, entityLocation,HDFS_Schema_DF))
-                        jobs.append(t)
-                        logger.endExecution()
-                        try:
-                                IDEorBatch = sys.argv[1]
-                        except Exception as e :
-                            IDEorBatch = "IDLE"
-                     
-                        log_dict = logger.getSuccessLoggedRecord("DataIngestion_"+table_name, DBName, EntityName, 0, 0, IDEorBatch)
-                        log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                        log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                        
-                    except Exception as ex:
-                        exc_type,exc_value,exc_traceback=sys.exc_info()
-                        print(str(ex))
-                        print("type - "+str(exc_type))
-                        print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-                        print("Error Line No. - "+str(exc_traceback.tb_lineno))
-                        ex = str(ex)
-                        logger.endExecution()
-                        try:
-                            IDEorBatch = sys.argv[1]
-                        except Exception as e :
-                            IDEorBatch = "IDLE"
-                        os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"") 
-                        log_dict = logger.getErrorLoggedRecord('DataIngestion'+table_name, DBName, EntityName, str(ex), exc_traceback.tb_lineno, IDEorBatch)
-                        log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                        log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)  
-                else:
-                    print(table_name+' table name does not exist in SQL Database')
-     
-            except Exception as ex:
-                exc_type,exc_value,exc_traceback=sys.exc_info()
-                print("Error:",ex)
-                print("type - "+str(exc_type))
-                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-                print("Error Line No. - "+str(exc_traceback.tb_lineno))
-                ex = str(ex)
-                logger.endExecution()
+        if entityLoc==ENTITY_LOCATION_LOCAL:
+            
+            STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/Stage1"
+            sqlurl=ConnectionInfo.SQL_URL.format(ac.config["SourceDBConnection"]['url'], str(ac.config["SourceDBConnection"]["port"]), dbName, ac.config["SourceDBConnection"]['userName'],ac.config["SourceDBConnection"]['password'],ac.config["SourceDBConnection"]['dbtable'])
+            HDFS_Schema_DF=schemaWriterIntoHDFS(sqlurl, entityLocation, entity)
+            query = "(SELECT name from sys.tables where name like '" + entity + "%') as data" 
+            viewDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=query,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=10000).load()
+            list_of_tables = viewDF.select(viewDF.name).rdd.flatMap(lambda x: x).collect()
+            for Table in ac.config["TablesToIngest"]:
                 try:
-                    IDEorBatch = sys.argv[1]
-                except Exception as e :
-                    IDEorBatch = "IDLE"
-                os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"")        
-                log_dict = logger.getErrorLoggedRecord('DataIngestion', DBName, EntityName , str(ex), exc_traceback.tb_lineno, IDEorBatch)
-                log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+                    logger=Logger()
+                    table_name = entity + Table['Table']
+                    CompanyNamewos=Table['Table'].replace(" ","")
+                    
+                    if (len(moduleName) == 0 and table_name in list_of_tables) \
+                        or (len(moduleName) > 0 and 'Modules' in Table and moduleName in Table['Modules'] and table_name in list_of_tables) \
+                        or (len(moduleName) > 0 and 'Modules' not in Table and table_name in list_of_tables):
+                        
+                        try:             
+                            t = threading.Thread(target=task, args=(entity, Table, sqlurl, entityLocation,HDFS_Schema_DF))
+                            jobs.append(t)
+                            logger.endExecution()
+                            try:
+                                    IDEorBatch = sys.argv[2]
+                            except Exception as e :
+                                IDEorBatch = "IDLE"
+                         
+                            log_dict = logger.getSuccessLoggedRecord("DataIngestion_"+table_name, DBName, EntityName, 0, 0, IDEorBatch)
+                            log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                        
+                        except Exception as ex:
+                            exc_type,exc_value,exc_traceback=sys.exc_info()
+                            print(str(ex))
+                            print("type - "+str(exc_type))
+                            print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+                            print("Error Line No. - "+str(exc_traceback.tb_lineno))
+                            ex = str(ex)
+                            logger.endExecution()
+                            try:
+                                IDEorBatch = sys.argv[2]
+                            except Exception as e :
+                                IDEorBatch = "IDLE"
+                            os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"") 
+                            log_dict = logger.getErrorLoggedRecord('DataIngestion'+table_name, DBName, EntityName, str(ex), exc_traceback.tb_lineno, IDEorBatch)
+                            log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)  
+                    else:
+                        print(table_name+' table name does not exist in SQL Database')
+         
+                except Exception as ex:
+                    exc_type,exc_value,exc_traceback=sys.exc_info()
+                    print("Error:",ex)
+                    print("type - "+str(exc_type))
+                    print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+                    print("Error Line No. - "+str(exc_traceback.tb_lineno))
+                    ex = str(ex)
+                    logger.endExecution()
+                    try:
+                        IDEorBatch = sys.argv[2]
+                    except Exception as e :
+                        IDEorBatch = "IDLE"
+                    os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"")        
+                    log_dict = logger.getErrorLoggedRecord('DataIngestion', DBName, EntityName , str(ex), exc_traceback.tb_lineno, IDEorBatch)
+                    log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                    log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
 
 
 def Configurator(ConfTab, STAGE1_Configurator_Path,DB,EntityName):
@@ -241,55 +221,70 @@ def Configurator(ConfTab, STAGE1_Configurator_Path,DB,EntityName):
         Configurator_Data=Configurator_Data.filter((Configurator_Data['DBName']==DB) & (Configurator_Data['EntityName']==EntityName))
        
     Configurator_Data.write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE1_Configurator_Path+ConfTab)
-   
-table_names = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl,dbtable='information_schema.tables',user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver=ConfiguratorDbInfo.props["driver"]).load().\
-filter("table_schema = '"+ConfiguratorDbInfo.Schema+"'").select("table_name")
-table_names_list = [row.table_name for row in table_names.collect()]
-for entityObj in ac.config["DbEntities"]:
-    entity = entityObj["Name"]
-    entityLoc = entityObj["Location"]
-    DB=entityLoc[0:3]
-    EntityName=entityLoc[3:6]
-    entityLocation=DB+"/"+EntityName
-    dbName = entityObj["DatabaseName"]
-    STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/Stage1"
-    STAGE1_Configurator_Path=STAGE1_PATH+"/ConfiguratorData/"
-    if entityLoc==ENTITY_LOCATION_LOCAL:
-        for ConfTab in table_names_list:
-            try:    
-                CompanyNamewos=ConfTab.replace(" ","")
-                logger=Logger()                        
-                t1 = threading.Thread(target=Configurator, args=(ConfTab, STAGE1_Configurator_Path,DB,EntityName))
-                jobs.append(t1)
-                logger.endExecution()
-                try:
-                    IDEorBatch = sys.argv[1]
-                except Exception as e :
-                    IDEorBatch = "IDLE"
+ 
+def Config_reload():  
+    
+    table_names = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl,dbtable='information_schema.tables',user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver=ConfiguratorDbInfo.props["driver"]).load().\
+    filter("table_schema = '"+ConfiguratorDbInfo.Schema+"'").select("table_name")
+    table_names_list = [row.table_name for row in table_names.collect()]
+    for entityObj in ac.config["DbEntities"]:
+        entity = entityObj["Name"]
+        entityLoc = entityObj["Location"]
+        DB=entityLoc[0:3]
+        EntityName=entityLoc[3:6]
+        entityLocation=DB+"/"+EntityName
+        dbName = entityObj["DatabaseName"]
+        STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/Stage1"
+        STAGE1_Configurator_Path=STAGE1_PATH+"/ConfiguratorData/"
+        if entityLoc==ENTITY_LOCATION_LOCAL:
+            for ConfTab in table_names_list:
+                try:    
+                    CompanyNamewos=ConfTab.replace(" ","")
+                    logger=Logger()                        
+                    t1 = threading.Thread(target=Configurator, args=(ConfTab, STAGE1_Configurator_Path,DB,EntityName))
+                    jobs.append(t1)
+                    logger.endExecution()
+                    try:
+                        IDEorBatch = sys.argv[2]
+                    except Exception as e :
+                        IDEorBatch = "IDLE"
+    
+                    log_dict = logger.getSuccessLoggedRecord("DataIngestion_"+ConfTab, DBName, EntityName, 0, 0, IDEorBatch)
+                    log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                    log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                        
+                except Exception as ex:
+                    exc_type,exc_value,exc_traceback=sys.exc_info()
+                    print(str(ex))
+                    print("type - "+str(exc_type))
+                    print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+                    print("Error Line No. - "+str(exc_traceback.tb_lineno))
+                    ex = str(ex)
+                    logger.endExecution()
+                    try:
+                        IDEorBatch = sys.argv[2]
+                    except Exception as e :
+                        IDEorBatch = "IDLE"
+                    os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"") 
+                    log_dict = logger.getErrorLoggedRecord('DataIngestion'+ConfTab, DBName, EntityName, str(ex), exc_traceback.tb_lineno, IDEorBatch)
+                    log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                    log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props) 
 
-                log_dict = logger.getSuccessLoggedRecord("DataIngestion_"+ConfTab, DBName, EntityName, 0, 0, IDEorBatch)
-                log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                        
-            except Exception as ex:
-                exc_type,exc_value,exc_traceback=sys.exc_info()
-                print(str(ex))
-                print("type - "+str(exc_type))
-                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-                print("Error Line No. - "+str(exc_traceback.tb_lineno))
-                ex = str(ex)
-                logger.endExecution()
-                try:
-                    IDEorBatch = sys.argv[1]
-                except Exception as e :
-                    IDEorBatch = "IDLE"
-                os.system("spark-submit "+Kockpit_Path+"/Email.py 1  DataIngestion "+CompanyNamewos+" "+entityLocation+" "+str(exc_traceback.tb_lineno)+"") 
-                log_dict = logger.getErrorLoggedRecord('DataIngestion'+ConfTab, DBName, EntityName, str(ex), exc_traceback.tb_lineno, IDEorBatch)
-                log_df = spark.createDataFrame(log_dict, logger.getSchema())
-                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props) 
-
-# FOR MULTITHREADING
-for j in jobs:
-    j.start()
-for j in jobs:
-    j.join()
-print('Stage 1 DataIngestion end: ', datetime.datetime.now())
+  
+    
+def Reload(Type):
+    if Type=='FULL':
+        full_reload()
+    elif Type=='CONFIGURATOR':
+        Config_reload()
+    else:
+        full_reload()
+        Config_reload()
+    print(jobs)
+    for j in jobs:
+        j.start()
+    for j in jobs:
+        j.join()
+    print('Stage 1 Full_reload end: ', datetime.datetime.now())
+if __name__ == "__main__":
+    
+    Reload('')

@@ -28,103 +28,84 @@ DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..','..'))
 STAGE1_Configurator_Path=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=Kockpit_Path+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster("local[*]").setAppName("PurchaseOrder")\
-        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
-                    set("spark.sql.shuffle.partitions",16).\
-                    set("spark.serializer", "org.apache.spark.serializer.KryoSerializer").\
-                    set("spark.local.dir", "/tmp/spark-temp").\
-                    set("spark.driver.memory","30g").\
-                    set("spark.executor.memory","30g").\
-                    set("spark.driver.cores",16).\
-                    set("spark.driver.maxResultSize","0").\
-                    set("spark.sql.debug.maxToStringFields", "1000").\
-                    set("spark.executor.instances", "20").\
-                    set('spark.scheduler.mode', 'FAIR').\
-                    set("spark.sql.broadcastTimeout", "36000").\
-                    set("spark.network.timeout", 10000000).\
-                    set("spark.sql.legacy.parquet.datetimeRebaseModeInWrite", "LEGACY").\
-                    set("spark.sql.legacy.parquet.datetimeRebaseModeInRead", "LEGACY").\
-                    set("spark.sql.legacy.parquet.datetimeRebaseModeInRead", "CORRECTED").\
-                    set("spark.sql.legacy.timeParserPolicy","LEGACY").\
-                    set("spark.sql.legacy.parquet.int96RebaseModeInWrite","LEGACY").\
-                    set("spark.sql.legacy.parquet.int96RebaseModeInWrite","CORRECTED")
-sc = SparkContext(conf = conf)
-sqlCtx = SQLContext(sc)
-spark = sqlCtx.sparkSession
-cy = date.today().year
-cm = date.today().month
-cdate = datetime.datetime.now().strftime('%Y-%m-%d')
-for dbe in config["DbEntities"]:
-    if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
-        CompanyName=dbe['Name']
-        CompanyName=CompanyName.replace(" ","") 
-        try:
-            logger = Logger()
-            phDF =spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Header")
-            plDF = spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Line")
-            DSE=spark.read.format("parquet").load(STAGE2_PATH+"/"+"Masters/DSE")
-            PDDBucket =spark.read.format("parquet").load(STAGE1_Configurator_Path+"/tblPDDBucket")
-            PDDBucket = PDDBucket.filter(PDDBucket['DBName'] == DBName).filter(PDDBucket['EntityName'] == EntityName)
-            SH = spark.read.format("parquet").load(STAGE1_PATH+"/Sales Header").select('No_','Bill-toCustomerNo_')\
-                        .withColumnRenamed('No_','SalesOrderNo').withColumnRenamed('Bill-toCustomerNo_','CustomerCode')
-            SL = spark.read.format("parquet").load(STAGE1_PATH+"/Sales Line").select('DocumentNo_','LineNo_','Pur_OrderNo_','POLineNo_')\
-                        .withColumnRenamed('DocumentNo_','SalesOrderNo').withColumnRenamed('LineNo_','SalesOrderLineNo')
-            SO = SL.join(SH,'SalesOrderNo', 'left')
-            SO = SO.filter(SO['Pur_OrderNo_']!='')
-            SO = SO.withColumnRenamed('Pur_OrderNo_','No_').withColumnRenamed('POLineNo_','LineNo_')
-            phDF = phDF.withColumn("LinkDate",to_date(phDF.PostingDate))\
-                        .withColumn("LinkVendor",when(phDF["Pay-toVendorNo_"]=='',"NA").otherwise(phDF["Pay-toVendorNo_"]))\
-                        .withColumn("RequestedReceiptDate",when((year(phDF.RequestedReceiptDate)<1900)|(phDF.RequestedReceiptDate.isNull()),to_date(phDF.PostingDate)).otherwise(to_date(phDF.RequestedReceiptDate)))\
-                        .withColumn("PromisedReceiptDate",when((year(phDF.PromisedReceiptDate)<1900)|(phDF.PromisedReceiptDate.isNull()),to_date(phDF.PostingDate)).otherwise(to_date(phDF.PromisedReceiptDate)))
-            plDF = plDF.withColumnRenamed('DocumentType','PLDocumentType')\
-                        .withColumnRenamed('PostingDate','PLPostingDate')\
-                        .withColumnRenamed('No_','ItemNo_')
-            PO = plDF.join(phDF, plDF['DocumentNo_']==phDF['No_'], 'left')
-            PO = PO.filter(PO['DocumentType']==1).filter(year(PO['PostingDate'])!=1753)
-            PO = Kockpit.RenameDuplicateColumns(PO)
-            PO = PO.withColumn("NOD_OrderDate",datediff(lit(datetime.datetime.today()),PO['OrderDate']))
-            PO = PO.join(SO,['No_','LineNo_'],'left')
-            PO =  PO.withColumn("LineAmount",when((PO.LineAmount/PO.CurrencyFactor).isNull(),PO.LineAmount).otherwise(PO.LineAmount/PO.CurrencyFactor))\
-                    .withColumn("Transaction_Type",lit("PurchaseOrder"))      
-            Maxoflt = PDDBucket.filter(PDDBucket['BucketName']=='<')
-            MaxLimit = int(Maxoflt.select('MaxLimit').first()[0])
-            Minofgt = PDDBucket.filter(PDDBucket['BucketName']=='>')
-            MinLimit = int(Minofgt.select('MinLimit').first()[0])
-            PO = PO.join(PDDBucket,PO.NOD_OrderDate == PDDBucket.Nod,'left').drop('ID','UpperLimit','LowerLimit')
-            PO=PO.withColumn('BucketName',when(PO.NOD_OrderDate>=MinLimit,lit(str(MinLimit)+'+')).otherwise(PO.BucketName))\
-                        .withColumn('Nod',when(PO.NOD_OrderDate>=MinLimit,PO.NOD_OrderDate).otherwise(PO.Nod))
-            PO=PO.withColumn('BucketName',when(PO.NOD_OrderDate<=(MaxLimit),lit("Not Due")).otherwise(PO.BucketName))\
-                        .withColumn('Nod',when(PO.NOD_OrderDate<=(MaxLimit), PO.NOD_OrderDate).otherwise(PO.Nod))
-            finalDF = PO.join(DSE,"DimensionSetID",'left')
-            finalDF = RenameDuplicateColumns(finalDF).drop("locationtype")
-            finalDF.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseOrder")
-            logger.endExecution()
-            
-            try:
-                IDEorBatch = sys.argv[1]
-            except Exception as e :
-                IDEorBatch = "IDLE"
-        
-            log_dict = logger.getSuccessLoggedRecord("Purchase.PurchaseOrder", DBName, EntityName, finalDF.count(), len(finalDF.columns), IDEorBatch)
-            log_df = spark.createDataFrame(log_dict, logger.getSchema())
-            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-                
-        except Exception as ex:
-            exc_type,exc_value,exc_traceback=sys.exc_info()
-            print("Error:",ex)
-            print("type - "+str(exc_type))
-            print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-            print("Error Line No. - "+str(exc_traceback.tb_lineno))
-            logger.endExecution()
-        
-            try:
-                IDEorBatch = sys.argv[1]
-            except Exception as e :
-                IDEorBatch = "IDLE"
-            os.system("spark-submit "+Kockpit_Path+"/Email.py 1  PurchaseOrder '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+" ")
-            log_dict = logger.getErrorLoggedRecord('Purchase.PurchaseOrder', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
-            log_df = spark.createDataFrame(log_dict, logger.getSchema())
-            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-print('purchase_PurchaseOrder completed: ' + str((dt.datetime.now()-st).total_seconds()))
- 
+sqlCtx, spark = getSparkConfig("local[*]", "Stage2:PurchaseOrder")
+def purchase_PurchaseOrder():
     
+    cy = date.today().year
+    cm = date.today().month
+    cdate = datetime.datetime.now().strftime('%Y-%m-%d')
+    for dbe in config["DbEntities"]:
+        if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
+            CompanyName=dbe['Name']
+            CompanyName=CompanyName.replace(" ","") 
+            try:
+                logger = Logger()
+                phDF =spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Header")
+                plDF = spark.read.format("parquet").load(STAGE1_PATH+"/Purchase Line")
+                DSE=spark.read.format("parquet").load(STAGE2_PATH+"/"+"Masters/DSE")
+                PDDBucket =spark.read.format("parquet").load(STAGE1_Configurator_Path+"/tblPDDBucket")
+                PDDBucket = PDDBucket.filter(PDDBucket['DBName'] == DBName).filter(PDDBucket['EntityName'] == EntityName)
+                SH = spark.read.format("parquet").load(STAGE1_PATH+"/Sales Header").select('No_','Bill-toCustomerNo_')\
+                            .withColumnRenamed('No_','SalesOrderNo').withColumnRenamed('Bill-toCustomerNo_','CustomerCode')
+                SL = spark.read.format("parquet").load(STAGE1_PATH+"/Sales Line").select('DocumentNo_','LineNo_','Pur_OrderNo_','POLineNo_')\
+                            .withColumnRenamed('DocumentNo_','SalesOrderNo').withColumnRenamed('LineNo_','SalesOrderLineNo')
+                SO = SL.join(SH,'SalesOrderNo', 'left')
+                SO = SO.filter(SO['Pur_OrderNo_']!='')
+                SO = SO.withColumnRenamed('Pur_OrderNo_','No_').withColumnRenamed('POLineNo_','LineNo_')
+                phDF = phDF.withColumn("LinkDate",to_date(phDF.PostingDate))\
+                            .withColumn("LinkVendor",when(phDF["Pay-toVendorNo_"]=='',"NA").otherwise(phDF["Pay-toVendorNo_"]))\
+                            .withColumn("RequestedReceiptDate",when((year(phDF.RequestedReceiptDate)<1900)|(phDF.RequestedReceiptDate.isNull()),to_date(phDF.PostingDate)).otherwise(to_date(phDF.RequestedReceiptDate)))\
+                            .withColumn("PromisedReceiptDate",when((year(phDF.PromisedReceiptDate)<1900)|(phDF.PromisedReceiptDate.isNull()),to_date(phDF.PostingDate)).otherwise(to_date(phDF.PromisedReceiptDate)))
+                plDF = plDF.withColumnRenamed('DocumentType','PLDocumentType')\
+                            .withColumnRenamed('PostingDate','PLPostingDate')\
+                            .withColumnRenamed('No_','ItemNo_')
+                PO = plDF.join(phDF, plDF['DocumentNo_']==phDF['No_'], 'left')
+                PO = PO.filter(PO['DocumentType']==1).filter(year(PO['PostingDate'])!=1753)
+                PO = Kockpit.RenameDuplicateColumns(PO)
+                PO = PO.withColumn("NOD_OrderDate",datediff(lit(datetime.datetime.today()),PO['OrderDate']))
+                PO = PO.join(SO,['No_','LineNo_'],'left')
+                PO =  PO.withColumn("LineAmount",when((PO.LineAmount/PO.CurrencyFactor).isNull(),PO.LineAmount).otherwise(PO.LineAmount/PO.CurrencyFactor))\
+                        .withColumn("Transaction_Type",lit("PurchaseOrder"))      
+                Maxoflt = PDDBucket.filter(PDDBucket['BucketName']=='<')
+                MaxLimit = int(Maxoflt.select('MaxLimit').first()[0])
+                Minofgt = PDDBucket.filter(PDDBucket['BucketName']=='>')
+                MinLimit = int(Minofgt.select('MinLimit').first()[0])
+                PO = PO.join(PDDBucket,PO.NOD_OrderDate == PDDBucket.Nod,'left').drop('ID','UpperLimit','LowerLimit')
+                PO=PO.withColumn('BucketName',when(PO.NOD_OrderDate>=MinLimit,lit(str(MinLimit)+'+')).otherwise(PO.BucketName))\
+                            .withColumn('Nod',when(PO.NOD_OrderDate>=MinLimit,PO.NOD_OrderDate).otherwise(PO.Nod))
+                PO=PO.withColumn('BucketName',when(PO.NOD_OrderDate<=(MaxLimit),lit("Not Due")).otherwise(PO.BucketName))\
+                            .withColumn('Nod',when(PO.NOD_OrderDate<=(MaxLimit), PO.NOD_OrderDate).otherwise(PO.Nod))
+                finalDF = PO.join(DSE,"DimensionSetID",'left')
+                finalDF = RenameDuplicateColumns(finalDF).drop("locationtype")
+                finalDF.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseOrder")
+                logger.endExecution()
+                
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
+            
+                log_dict = logger.getSuccessLoggedRecord("Purchase.PurchaseOrder", DBName, EntityName, finalDF.count(), len(finalDF.columns), IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+                    
+            except Exception as ex:
+                exc_type,exc_value,exc_traceback=sys.exc_info()
+                print("Error:",ex)
+                print("type - "+str(exc_type))
+                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+                print("Error Line No. - "+str(exc_traceback.tb_lineno))
+                logger.endExecution()
+            
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
+                os.system("spark-submit "+Kockpit_Path+"/Email.py 1  PurchaseOrder '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+" ")
+                log_dict = logger.getErrorLoggedRecord('Purchase.PurchaseOrder', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+    print('purchase_PurchaseOrder completed: ' + str((dt.datetime.now()-st).total_seconds()))
+     
+if __name__ == '__main__':
+    purchase_PurchaseOrder()       

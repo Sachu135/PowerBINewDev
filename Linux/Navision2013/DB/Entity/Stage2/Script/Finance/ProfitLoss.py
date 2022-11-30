@@ -30,117 +30,91 @@ Datelog = datetime.datetime.now().strftime('%Y-%m-%d')
 STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster(SPARK_MASTER).setAppName("ProfitLoss")\
-        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
-        .set("spark.kryoserializer.buffer.max","512m")\
-        .set("spark.cores.max","24")\
-        .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","30g")\
-        .set("spark.driver.maxResultSize","0")\
-        .set("spark.sql.debug.maxToStringFields","500")\
-        .set("spark.driver.maxResultSize","20g")\
-        .set("spark.memory.offHeap.enabled",'true')\
-        .set("spark.memory.offHeap.size","100g")\
-        .set('spark.scheduler.mode', 'FAIR')\
-        .set("spark.sql.broadcastTimeout", "36000")\
-        .set("spark.network.timeout", 10000000)\
-        .set("spark.sql.codegen.wholeStage","false")\
-        .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
-        .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
-        .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
-        .set("spark.databricks.delta.vacuum.parallelDelete.enabled",'true')\
-        .set("spark.databricks.delta.retentionDurationCheck.enabled",'false')\
-        .set('spark.hadoop.mapreduce.output.fileoutputformat.compress', 'false')\
-        .set("spark.rapids.sql.enabled", True)\
-        .set("spark.sql.legacy.parquet.int96RebaseModeInWrite", "CORRECTED")
-sc = SparkContext(conf = conf)
-sqlCtx = SQLContext(sc)
-spark = sqlCtx.sparkSession
-import delta
-from delta.tables import *
-fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(sc._jsc.hadoopConfiguration())
-for dbe in config["DbEntities"]:
-    if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
-        CompanyName=dbe['Name']
-        CompanyName=CompanyName.replace(" ","")
-        try:
-            logger = Logger()
-            GL_Entry_Table =spark.read.format("delta").load(STAGE1_PATH+"/G_L Entry")
-            GL_Account_Table =spark.read.format("delta").load(STAGE1_PATH+"/G_L Account")
-            Company =spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblCompanyName")
-            COA = spark.read.format("delta").load(STAGE2_PATH+"/Masters/ChartofAccounts")
-            Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
-            Calendar_StartDate = Company.select('StartDate').rdd.flatMap(lambda x: x).collect()[0]
-            Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
-            if datetime.date.today().month>int(MnSt)-1:
-                UIStartYr=datetime.date.today().year-int(yr)+1
-            else:
-                UIStartYr=datetime.date.today().year-int(yr)
-            UIStartDate=datetime.date(UIStartYr,int(MnSt),1)
-            UIStartDate=max(Calendar_StartDate,UIStartDate)
-           
-            GL_Account_Table = GL_Account_Table.select("No_","Income_Balance")\
-                                        .withColumnRenamed('No_','No').drop('DBName','EntityName')
-            GL_Entry_Table = GL_Entry_Table.withColumn('PostingDate',to_date(GL_Entry_Table['PostingDate'])).drop('DBName','EntityName')
-            GLEntry = GL_Entry_Table.join(GL_Account_Table,GL_Entry_Table['G_LAccountNo_']==GL_Account_Table['No'],'left')
-            GLEntry = GLEntry.filter(GLEntry['Income_Balance']==0)\
-                        .filter(GLEntry["SourceCode"]!='CLSINCOME')\
-                        .filter(year(GLEntry["PostingDate"])!='1753')\
-                        .filter(GLEntry["PostingDate"]>=UIStartDate)
-            GLEntry = GLEntry.withColumnRenamed("EntryNo_","Entry_No")\
-                                    .withColumn("LinkDate",GL_Entry_Table["PostingDate"])\
-                                    .withColumn("GL_Posting_Date",GL_Entry_Table["PostingDate"])\
-                                    .withColumn("linkdoc", concat(GL_Entry_Table["DocumentNo_"],lit('||'),GL_Entry_Table["G_LAccountNo_"]))\
-                                    .withColumn("Cost_Amount",GL_Entry_Table["Amount"])\
-                                    .withColumnRenamed("DocumentNo_","Document_No")\
-                                    .withColumnRenamed("Description","GL_Description")\
-                                    .withColumnRenamed("SourceNo_","Source_No")\
-                                    .withColumnRenamed("G_LAccountNo_","GLAccount")\
-                                    .withColumn("Transaction_Type",lit("GLEntry"))\
-                                    .withColumn("Entry_Flag",lit("GL"))
-            COA = COA.select('GLAccount','GLRangeCategory')
-            GLEntry = GLEntry.join(COA,'GLAccount','left')
-            GLEntry = GLEntry.withColumn("LinkDateKey",concat_ws("|",lit(DBName),lit(EntityName),GLEntry.LinkDate))\
-                            .withColumn("Link_GLAccount_Key",concat_ws("|",lit(DBName),lit(EntityName),GLEntry.GLAccount))\
-                            .withColumn("DBName",lit(DBName))\
-                            .withColumn("EntityName",lit(EntityName))         
-            GLEntry = GLEntry.withColumn('Amount',round('Amount',5))\
-                            .withColumn('Cost_Amount',round('Cost_Amount',5))\
-                            .withColumn('CreditAmount',round('CreditAmount',5))\
-                            .withColumn('DebitAmount',round('DebitAmount',5))
-            DSE = spark.read.format("delta").load(STAGE2_PATH+"/Masters/DSE").drop("DBName","EntityName")
-            GLEntry =  GLEntry.join(DSE,"DimensionSetID",'left')
-            GLEntry=GLEntry.drop("GlobalDimension1Code","GlobalDimension12Code","GlobalDimension1Code13","GlobalDimension14Code","GlobalDimension1Code2")
-            GLEntry.cache()
-            print(GLEntry.count())
-            GLEntry.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/ProfitLoss")
-            
-            logger.endExecution()
+sqlCtx,spark=getSparkConfig(SPARK_MASTER, "Stage2:Finance-ProfitLoss")
+def finance_ProfitLoss():
+    for dbe in config["DbEntities"]:
+        if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
+            CompanyName=dbe['Name']
+            CompanyName=CompanyName.replace(" ","")
             try:
-                IDEorBatch = sys.argv[1]
-            except Exception as e :
-                IDEorBatch = "IDLE"
-        
-            log_dict = logger.getSuccessLoggedRecord("Finance.ProfitLoss", DBName, EntityName, GLEntry.count(), len(GLEntry.columns), IDEorBatch)
-            log_df = spark.createDataFrame(log_dict, logger.getSchema())
-            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+                logger = Logger()
+                GL_Entry_Table =spark.read.format("delta").load(STAGE1_PATH+"/G_L Entry")
+                GL_Account_Table =spark.read.format("delta").load(STAGE1_PATH+"/G_L Account")
+                Company =spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblCompanyName")
+                COA = spark.read.format("delta").load(STAGE2_PATH+"/Masters/ChartofAccounts")
+                Company = Company.filter(col('DBName')==DBName).filter(col('NewCompanyName') == EntityName)
+                Calendar_StartDate = Company.select('StartDate').rdd.flatMap(lambda x: x).collect()[0]
+                Calendar_StartDate = datetime.datetime.strptime(Calendar_StartDate,"%Y-%m-%d").date()
+                if datetime.date.today().month>int(MnSt)-1:
+                    UIStartYr=datetime.date.today().year-int(yr)+1
+                else:
+                    UIStartYr=datetime.date.today().year-int(yr)
+                UIStartDate=datetime.date(UIStartYr,int(MnSt),1)
+                UIStartDate=max(Calendar_StartDate,UIStartDate)
+               
+                GL_Account_Table = GL_Account_Table.select("No_","Income_Balance")\
+                                            .withColumnRenamed('No_','No').drop('DBName','EntityName')
+                GL_Entry_Table = GL_Entry_Table.withColumn('PostingDate',to_date(GL_Entry_Table['PostingDate'])).drop('DBName','EntityName')
+                GLEntry = GL_Entry_Table.join(GL_Account_Table,GL_Entry_Table['G_LAccountNo_']==GL_Account_Table['No'],'left')
+                GLEntry = GLEntry.filter(GLEntry['Income_Balance']==0)\
+                            .filter(GLEntry["SourceCode"]!='CLSINCOME')\
+                            .filter(year(GLEntry["PostingDate"])!='1753')\
+                            .filter(GLEntry["PostingDate"]>=UIStartDate)
+                GLEntry = GLEntry.withColumnRenamed("EntryNo_","Entry_No")\
+                                        .withColumn("LinkDate",GL_Entry_Table["PostingDate"])\
+                                        .withColumn("GL_Posting_Date",GL_Entry_Table["PostingDate"])\
+                                        .withColumn("linkdoc", concat(GL_Entry_Table["DocumentNo_"],lit('||'),GL_Entry_Table["G_LAccountNo_"]))\
+                                        .withColumn("Cost_Amount",GL_Entry_Table["Amount"])\
+                                        .withColumnRenamed("DocumentNo_","Document_No")\
+                                        .withColumnRenamed("Description","GL_Description")\
+                                        .withColumnRenamed("SourceNo_","Source_No")\
+                                        .withColumnRenamed("G_LAccountNo_","GLAccount")\
+                                        .withColumn("Transaction_Type",lit("GLEntry"))\
+                                        .withColumn("Entry_Flag",lit("GL"))
+                COA = COA.select('GLAccount','GLRangeCategory')
+                GLEntry = GLEntry.join(COA,'GLAccount','left')
+                GLEntry = GLEntry.withColumn("LinkDateKey",concat_ws("|",lit(DBName),lit(EntityName),GLEntry.LinkDate))\
+                                .withColumn("Link_GLAccount_Key",concat_ws("|",lit(DBName),lit(EntityName),GLEntry.GLAccount))\
+                                .withColumn("DBName",lit(DBName))\
+                                .withColumn("EntityName",lit(EntityName))         
+                GLEntry = GLEntry.withColumn('Amount',round('Amount',5))\
+                                .withColumn('Cost_Amount',round('Cost_Amount',5))\
+                                .withColumn('CreditAmount',round('CreditAmount',5))\
+                                .withColumn('DebitAmount',round('DebitAmount',5))
+                DSE = spark.read.format("delta").load(STAGE2_PATH+"/Masters/DSE").drop("DBName","EntityName")
+                GLEntry =  GLEntry.join(DSE,"DimensionSetID",'left')
+                GLEntry=GLEntry.drop("GlobalDimension1Code","GlobalDimension12Code","GlobalDimension1Code13","GlobalDimension14Code","GlobalDimension1Code2")
+                GLEntry.cache()
+                print(GLEntry.count())
+                GLEntry.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/ProfitLoss")
+                
+                logger.endExecution()
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
             
-        except Exception as ex:
-            exc_type,exc_value,exc_traceback=sys.exc_info()
-            print("Error:",ex)
-            print("type - "+str(exc_type))
-            print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-            print("Error Line No. - "+str(exc_traceback.tb_lineno))
-            logger.endExecution()
+                log_dict = logger.getSuccessLoggedRecord("Finance.ProfitLoss", DBName, EntityName, GLEntry.count(), len(GLEntry.columns), IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+                
+            except Exception as ex:
+                exc_type,exc_value,exc_traceback=sys.exc_info()
+                print("Error:",ex)
+                print("type - "+str(exc_type))
+                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+                print("Error Line No. - "+str(exc_traceback.tb_lineno))
+                logger.endExecution()
+            
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
+                os.system("spark-submit "+Kockpit_Path+"/Email.py 1 ProfitLoss '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+" ")
         
-            try:
-                IDEorBatch = sys.argv[1]
-            except Exception as e :
-                IDEorBatch = "IDLE"
-            os.system("spark-submit "+Kockpit_Path+"/Email.py 1 ProfitLoss '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+" ")
-    
-            log_dict = logger.getErrorLoggedRecord('Finance.ProfitLoss', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
-            log_df = spark.createDataFrame(log_dict, logger.getSchema())
-            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-print('finance_ProfitLoss completed: ' + str((dt.datetime.now()-st).total_seconds()))     
-
+                log_dict = logger.getErrorLoggedRecord('Finance.ProfitLoss', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+    print('finance_ProfitLoss completed: ' + str((dt.datetime.now()-st).total_seconds()))     
+if __name__ == "__main__":
+    finance_ProfitLoss()      

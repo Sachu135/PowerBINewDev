@@ -23,97 +23,73 @@ DBEntity = DBName+EntityName
 STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ConfiguratorData/"
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
-conf = SparkConf().setMaster(SPARK_MASTER).setAppName("SalesTarget")\
-        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
-        .set("spark.kryoserializer.buffer.max","512m")\
-        .set("spark.cores.max","24")\
-        .set("spark.executor.memory","8g")\
-        .set("spark.driver.memory","30g")\
-        .set("spark.driver.maxResultSize","0")\
-        .set("spark.sql.debug.maxToStringFields","500")\
-        .set("spark.driver.maxResultSize","20g")\
-        .set("spark.memory.offHeap.enabled",'true')\
-        .set("spark.memory.offHeap.size","100g")\
-        .set('spark.scheduler.mode', 'FAIR')\
-        .set("spark.sql.broadcastTimeout", "36000")\
-        .set("spark.network.timeout", 10000000)\
-        .set("spark.sql.codegen.wholeStage","false")\
-        .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
-        .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
-        .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
-        .set("spark.databricks.delta.vacuum.parallelDelete.enabled",'true')\
-        .set("spark.databricks.delta.retentionDurationCheck.enabled",'false')\
-        .set('spark.hadoop.mapreduce.output.fileoutputformat.compress', 'false')\
-        .set("spark.rapids.sql.enabled", True)\
-        .set("spark.sql.legacy.parquet.int96RebaseModeInWrite", "CORRECTED")
-sc = SparkContext(conf = conf)
-sqlCtx = SQLContext(sc)
-spark = sqlCtx.sparkSession
-import delta
-from delta.tables import *
-for dbe in config["DbEntities"]:
-    if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
-        CompanyName=dbe['Name']
-        CompanyName=CompanyName.replace(" ","")
-        try: 
-            logger = Logger()
-            GLB = spark.read.format("delta").load(STAGE1_PATH+"/G_L Budget Entry")
-            GLMap = spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblGLAccountMapping")
-            DSE =spark.read.format("delta").load(STAGE1_PATH+"/Dimension Set Entry")
-            GLB=GLB.withColumn("LinkDate",to_date(GLB.Date))\
-                    .withColumn("Amount",GLB.Amount*-1).drop('Date')
-            GLB=RENAME(GLB,{"G_LAccountNo_":"GLAccount","BudgetDimension1Code":"RSM_TMC"
-                                       ,"BudgetDimension2Code":"Link_TARGETPROD","DimensionSetID":"DimSetID"})
-            GLB=GLB.withColumn('LinkSalesPerson',when(GLB['RSM_TMC']=='4485', GLB['RSM_TMC']).otherwise(GLB['BudgetDimension3Code']))
-            SUBBU=DSE.filter(DSE['DimensionCode']=='SUBBU')
-            GLB = GLB.join(SUBBU, GLB['DimSetId']==SUBBU['DimensionSetId'], 'left')
-            GLB = GLB.withColumnRenamed("DimensionValueCode","LINK_SUBBU")
-            GLB = GLB.select("LinkDate","Amount","GLAccount","RSM_TMC","DimSetID","Link_TARGETPROD","LINK_SUBBU","BudgetName","LinkSalesPerson")
-            SBU=DSE.filter(DSE['DimensionCode']=='SBU')
-            GLB = GLB.join(SBU, GLB['DimSetId']==SBU['DimensionSetId'], 'left')
-            GLB = GLB.withColumnRenamed("DimensionValueCode","LINK_SBU")
-            GLB = GLB.select("LinkDate","Amount","GLAccount","RSM_TMC","DimSetID","Link_TARGETPROD","LINK_SUBBU","LINK_SBU","BudgetName","LinkSalesPerson")
-            GLMap = GLMap.withColumnRenamed('GLRangeCategory','GLCategory')\
-                                .withColumnRenamed('FromGLCode','FromGL')\
-                                .withColumnRenamed('ToGLCode','ToGL')
-            GLRange = GLMap.filter(GLMap["GLCategory"] == 'REVENUE').filter(GLMap["DBName"] == DBName)\
-                                    .filter(GLMap["EntityName"] == EntityName).select("GLCategory","FromGL","ToGL")
-            NoOfRows=GLRange.count()
-            for i in range(0,NoOfRows):
-                        if i==0:
-                            Range = (GLB.GLAccount>=GLRange.select('FromGL').collect()[0]['FromGL']) \
-                                & (GLB.GLAccount<=GLRange.select('ToGL').collect()[0]['ToGL'])
-                
-                        else:
-                            Range = (Range) | ((GLB.GLAccount>=GLRange.select('FromGL').collect()[i]['FromGL']) \
-                                               & (GLB.GLAccount<=GLRange.select('ToGL').collect()[i]['ToGL']))              
-            GLB=GLB.filter(GLB['BudgetName'].like('SALESTGT%'))\
-                     .filter(Range)
-            GLB.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/SalesTarget")
-            logger.endExecution()
-            try:
-                IDEorBatch = sys.argv[1]
-            except Exception as e :
-                IDEorBatch = "IDLE"
-            log_dict = logger.getSuccessLoggedRecord("Sales.SalesTarget", DBName, EntityName, GLB.count(), len(GLB.columns), IDEorBatch)
-            log_df = spark.createDataFrame(log_dict, logger.getSchema())
-            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-        except Exception as ex:
-            exc_type,exc_value,exc_traceback=sys.exc_info()
-            print("Error:",ex)
-            print("type - "+str(exc_type))
-            print("File - "+exc_traceback.tb_frame.f_code.co_filename)
-            print("Error Line No. - "+str(exc_traceback.tb_lineno))
-            ex = str(ex)
-            logger.endExecution()
-        
-            try:
-                IDEorBatch = sys.argv[1]
-            except Exception as e :
-                IDEorBatch = "IDLE"
-            os.system("spark-submit "+Kockpit_Path+"/Email.py 1 SalesTarget '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+"")
+sqlCtx,spark=getSparkConfig(SPARK_MASTER, "Stage2:Sales-SalesTarget")
+def sales_SalesTarget():
+    for dbe in config["DbEntities"]:
+        if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
+            CompanyName=dbe['Name']
+            CompanyName=CompanyName.replace(" ","")
+            try: 
+                logger = Logger()
+                GLB = spark.read.format("delta").load(STAGE1_PATH+"/G_L Budget Entry")
+                GLMap = spark.read.format("delta").load(STAGE1_Configurator_Path+"/tblGLAccountMapping")
+                DSE =spark.read.format("delta").load(STAGE1_PATH+"/Dimension Set Entry")
+                GLB=GLB.withColumn("LinkDate",to_date(GLB.Date))\
+                        .withColumn("Amount",GLB.Amount*-1).drop('Date')
+                GLB=RENAME(GLB,{"G_LAccountNo_":"GLAccount","BudgetDimension1Code":"RSM_TMC"
+                                           ,"BudgetDimension2Code":"Link_TARGETPROD","DimensionSetID":"DimSetID"})
+                GLB=GLB.withColumn('LinkSalesPerson',when(GLB['RSM_TMC']=='4485', GLB['RSM_TMC']).otherwise(GLB['BudgetDimension3Code']))
+                SUBBU=DSE.filter(DSE['DimensionCode']=='SUBBU')
+                GLB = GLB.join(SUBBU, GLB['DimSetId']==SUBBU['DimensionSetId'], 'left')
+                GLB = GLB.withColumnRenamed("DimensionValueCode","LINK_SUBBU")
+                GLB = GLB.select("LinkDate","Amount","GLAccount","RSM_TMC","DimSetID","Link_TARGETPROD","LINK_SUBBU","BudgetName","LinkSalesPerson")
+                SBU=DSE.filter(DSE['DimensionCode']=='SBU')
+                GLB = GLB.join(SBU, GLB['DimSetId']==SBU['DimensionSetId'], 'left')
+                GLB = GLB.withColumnRenamed("DimensionValueCode","LINK_SBU")
+                GLB = GLB.select("LinkDate","Amount","GLAccount","RSM_TMC","DimSetID","Link_TARGETPROD","LINK_SUBBU","LINK_SBU","BudgetName","LinkSalesPerson")
+                GLMap = GLMap.withColumnRenamed('GLRangeCategory','GLCategory')\
+                                    .withColumnRenamed('FromGLCode','FromGL')\
+                                    .withColumnRenamed('ToGLCode','ToGL')
+                GLRange = GLMap.filter(GLMap["GLCategory"] == 'REVENUE').filter(GLMap["DBName"] == DBName)\
+                                        .filter(GLMap["EntityName"] == EntityName).select("GLCategory","FromGL","ToGL")
+                NoOfRows=GLRange.count()
+                for i in range(0,NoOfRows):
+                            if i==0:
+                                Range = (GLB.GLAccount>=GLRange.select('FromGL').collect()[0]['FromGL']) \
+                                    & (GLB.GLAccount<=GLRange.select('ToGL').collect()[0]['ToGL'])
+                    
+                            else:
+                                Range = (Range) | ((GLB.GLAccount>=GLRange.select('FromGL').collect()[i]['FromGL']) \
+                                                   & (GLB.GLAccount<=GLRange.select('ToGL').collect()[i]['ToGL']))              
+                GLB=GLB.filter(GLB['BudgetName'].like('SALESTGT%'))\
+                         .filter(Range)
+                GLB.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/SalesTarget")
+                logger.endExecution()
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
+                log_dict = logger.getSuccessLoggedRecord("Sales.SalesTarget", DBName, EntityName, GLB.count(), len(GLB.columns), IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+            except Exception as ex:
+                exc_type,exc_value,exc_traceback=sys.exc_info()
+                print("Error:",ex)
+                print("type - "+str(exc_type))
+                print("File - "+exc_traceback.tb_frame.f_code.co_filename)
+                print("Error Line No. - "+str(exc_traceback.tb_lineno))
+                ex = str(ex)
+                logger.endExecution()
             
-            log_dict = logger.getErrorLoggedRecord('Sales.SalesTarget', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
-            log_df = spark.createDataFrame(log_dict, logger.getSchema())
-            log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-print('sales_SalesTarget completed: ' + str((dt.datetime.now()-st).total_seconds()))
+                try:
+                    IDEorBatch = sys.argv[1]
+                except Exception as e :
+                    IDEorBatch = "IDLE"
+                os.system("spark-submit "+Kockpit_Path+"/Email.py 1 SalesTarget '"+CompanyName+"' "+DBEntity+" "+str(exc_traceback.tb_lineno)+"")
+                
+                log_dict = logger.getErrorLoggedRecord('Sales.SalesTarget', DBName, EntityName, str(ex), str(exc_traceback.tb_lineno), IDEorBatch)
+                log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
+    print('sales_SalesTarget completed: ' + str((dt.datetime.now()-st).total_seconds()))
+if __name__ == "__main__":
+    sales_SalesTarget()
