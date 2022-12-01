@@ -44,8 +44,7 @@ for d in DBList:
                 if 'E' in folders: 
                     path=os.path.join(kockpit_path,d,folders,c)
                     path_f.append(path)
-print(path_f)
-exit()                        
+
 local_tz = pendulum.timezone("Asia/Calcutta")
 dagargs = {
     'owner': 'kockpit',

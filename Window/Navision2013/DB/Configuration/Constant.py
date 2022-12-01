@@ -90,7 +90,7 @@ class Logger:
                 }]
         
         
- class PowerBISync:
+class PowerBISync:
     LOGIN_URL = 'https://login.microsoftonline.com/common/oauth2/token'
     LOGIN_REQUEST_PARAMS = {'grant_type': 'password',
          'username': '',
