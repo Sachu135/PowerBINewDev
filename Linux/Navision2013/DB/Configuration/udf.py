@@ -13,7 +13,7 @@ from enum import Flag
 
 
 __all__ = ['JOIN','LJOIN','RJOIN','FULL','RENAME','MONTHSDF','LASTDAY','DRANGE','CONCATENATE',
-	  'UNREDUCE','UNALL','BUCKET', 'ToDF', 'ToDFWitoutPrefix', 'ToTrimmedColumnsDF', 'RenameDuplicateColumns']
+	  'UNREDUCE','UNALL','BUCKET', 'ToDF', 'ToDFWitoutPrefix', 'ToTrimmedColumnsDF', 'RenameDuplicateColumns','getSparkConfig']
 
 __version__ = '0.1'
 
@@ -374,7 +374,35 @@ def fm_score(x,c):
         return 4
     else:
         return 5    
-       
+def getSparkConfig(master, appName):
+	conf = SparkConf().setMaster(master).setAppName(appName)\
+        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
+        .set("spark.kryoserializer.buffer.max","512m")\
+        .set("spark.cores.max","24")\
+        .set("spark.executor.memory","8g")\
+        .set("spark.driver.memory","30g")\
+        .set("spark.driver.maxResultSize","0")\
+        .set("spark.sql.debug.maxToStringFields","500")\
+        .set("spark.driver.maxResultSize","20g")\
+        .set("spark.memory.offHeap.enabled",'true')\
+        .set("spark.memory.offHeap.size","100g")\
+        .set('spark.scheduler.mode', 'FAIR')\
+        .set("spark.sql.broadcastTimeout", "36000")\
+        .set("spark.network.timeout", 10000000)\
+        .set("spark.sql.codegen.wholeStage","false")\
+        .set("spark.jars.packages", "io.delta:delta-core_2.12:0.7.0")\
+        .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\
+        .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
+        .set("spark.databricks.delta.vacuum.parallelDelete.enabled",'true')\
+        .set("spark.databricks.delta.retentionDurationCheck.enabled",'false')\
+        .set('spark.hadoop.mapreduce.output.fileoutputformat.compress', 'false')\
+        .set("spark.rapids.sql.enabled", True)\
+        .set("spark.sql.legacy.parquet.int96RebaseModeInWrite", "CORRECTED")
+
+	sc = SparkContext.getOrCreate(conf = conf)
+	sqlCtx = SQLContext(sc)
+	spark = SparkSession.builder.appName(appName).getOrCreate() #sqlCtx.sparkSession #SparkSession.builder.appName("Item").getOrCreate() #
+	return sqlCtx, spark   
        
 
     
