@@ -17,7 +17,7 @@ list_f=[]
 dir_list=[]
 c='Common'
 root_directory=abspath(join(join(dirname(__file__),'..','..')))
-kockpit_path="/home/hadoop/KOCKPIT12"
+kockpit_path="#ConfiguratorInstallationDrive"
 
 sys.path.insert(0, kockpit_path)
 for folders in os.listdir(kockpit_path):
