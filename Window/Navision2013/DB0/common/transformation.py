@@ -25,7 +25,7 @@ from Configuration.AppConfig import *
 from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf as Kockpit
-from DB0 import common
+from DB0 import Common
 from DB0 import Stage
 
 
