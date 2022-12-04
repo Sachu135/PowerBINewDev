@@ -1,4 +1,4 @@
-4              from pyspark import SparkConf, SparkContext
+from pyspark import SparkConf, SparkContext
 from pyspark.sql import SQLContext, SparkSession,Row
 from pyspark.sql import functions as f
 from pyspark.sql.types import *
