@@ -27,9 +27,9 @@ DB0 = DB0[1]
 owmode = 'overwrite'
 apmode = 'append'                           
 st = dt.datetime.now()
-sqlCtx, spark = getSparkConfig("local[*]", "Stage:PROJECT_Dimension")
-def masters_PROJECT_Dimension():
-   
+sqlCtx, spark = getSparkConfig("local[*]", "Stage:SUBBU_Dimension")
+def masters_SUBBU_Dimension():
+    
     try:
         logger =Logger()
         ConfTab='tblCompanyName'
@@ -54,7 +54,7 @@ def masters_PROJECT_Dimension():
                     CompanyName=(CompanyDetail.collect()[i]['CompanyName'])
                     DBE=DBName+EntityName
                     CompanyName=CompanyName.replace(" ","")
-                    Path = Abs_Path+"/"+DBName+"/"+EntityName+"\\Stage2\\ParquetData\\Masters\PROJECT_Dimension"
+                    Path = Abs_Path+"/"+DBName+"/"+EntityName+"\\Stage2\\ParquetData\\Masters\SUBBU_Dimension"
                    
                     if os.path.exists(Path):
                         
@@ -69,9 +69,9 @@ def masters_PROJECT_Dimension():
                             finalDF=finalDF.unionByName(finalDF1,allowMissingColumns=True)
                                   
                     else:
-                        print("PROJECT_Dimension "+DBName+EntityName+" Does not exist")
+                        print("SUBBU_Dimension "+DBName+EntityName+" Does not exist")
                                     
-        finalDF.write.jdbc(url=PostgresDbInfo.PostgresUrl , table="Masters.PROJECT_Dimension", mode=owmode, properties=PostgresDbInfo.props)
+        finalDF.write.jdbc(url=PostgresDbInfo.PostgresUrl , table="Masters.SUBBU_Dimension", mode=owmode, properties=PostgresDbInfo.props)
                   
         logger.endExecution()
         try:
@@ -79,7 +79,7 @@ def masters_PROJECT_Dimension():
         except Exception as e :
             IDEorBatch = "IDLE"
     
-        log_dict = logger.getSuccessLoggedRecord("Masters.PROJECT_Dimension", DB0, " ", finalDF.count(), len(finalDF.columns), IDEorBatch)
+        log_dict = logger.getSuccessLoggedRecord("Masters.SUBBU_Dimension", DB0, " ", finalDF.count(), len(finalDF.columns), IDEorBatch)
         log_df = spark.createDataFrame(log_dict, logger.getSchema())
         log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)                 
     except Exception as ex:
@@ -95,12 +95,12 @@ def masters_PROJECT_Dimension():
         except Exception as e :
             IDEorBatch = "IDLE"
         DBE=DBName+EntityName
-        os.system("spark-submit "+Kockpit_Path+"\Email.py 1 PROJECT_Dimension "+CompanyName+" "+" "+str(exc_traceback.tb_lineno)+"")   
-        log_dict = logger.getErrorLoggedRecord('Masters.PROJECT_Dimension', DB0, " " , str(ex), exc_traceback.tb_lineno, IDEorBatch)
+        os.system("spark-submit "+Kockpit_Path+"\Email.py 1 SUBBU_Dimension "+CompanyName+" "+" "+str(exc_traceback.tb_lineno)+"")   
+        log_dict = logger.getErrorLoggedRecord('Masters.SUBBU_Dimension', DB0, " " , str(ex), exc_traceback.tb_lineno, IDEorBatch)
         log_df = spark.createDataFrame(log_dict, logger.getSchema())
         log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)        
-    print('Masters_ PROJECT_Dimension completed: ' + str((dt.datetime.now()-st).total_seconds()))     
+    print('Masters_ SUBBU_Dimension completed: ' + str((dt.datetime.now()-st).total_seconds()))     
           
 if __name__ == "__main__":
     
-    masters_PROJECT_Dimension()           
+    masters_SUBBU_Dimension()            
