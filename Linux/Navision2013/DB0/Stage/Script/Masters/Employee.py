@@ -32,6 +32,7 @@ def masters_Employee():
     fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
     ConfTab='tblCompanyName'
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         Query="(SELECT *\
                         FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
         CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()
@@ -56,7 +57,7 @@ def masters_Employee():
                     Path = HDFS_PATH+DIR_PATH+"/"+DBName+"/"+EntityName+"/Stage2/ParquetData/Masters/Employee"
                     fe = fs.exists(spark._jvm.org.apache.hadoop.fs.Path(Path))
                     if(fe):
-                        finalDF=spark.read.format("delta").load(Path)
+                        finalDF1=spark.read.format("delta").load(Path)
                         if (d==0) & (i==0):
                             finalDF=finalDF1
                             

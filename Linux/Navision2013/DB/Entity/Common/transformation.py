@@ -25,9 +25,7 @@ from Configuration import  AppConfig as ac
 from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf 
-from E1 import Common 
-from E1 import Stage2
-from E1 import Stage1
+
 
 from Stage1.Script.DataIngestion import Reload
 from Stage2.Script.Masters.Calendar import masters_calendar

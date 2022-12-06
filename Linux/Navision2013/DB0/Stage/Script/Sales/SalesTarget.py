@@ -29,10 +29,10 @@ apmode = 'append'
 st = dt.datetime.now()
 sqlCtx,spark=getSparkConfig(SPARK_MASTER, "StageDB0:Sales-SalesTarget")
 def sales_SalesTarget():
-    print("entering-------------------------------")
     fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
     ConfTab='tblCompanyName'
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         Query="(SELECT *\
                         FROM "+ConfiguratorDbInfo.Schema+"."+chr(34)+ConfTab+chr(34)+") AS df"
         CompanyDetail = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver= ConfiguratorDbInfo.props["driver"]).load()
@@ -60,7 +60,6 @@ def sales_SalesTarget():
                         finalDF1=spark.read.format("delta").load(Path)
                         if (d==0) & (i==0):
                             finalDF=finalDF1
-                            
                         else:
                             finalDF=finalDF.unionByName(finalDF1,allowMissingColumns=True)
                             
