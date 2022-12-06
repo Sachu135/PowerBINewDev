@@ -31,6 +31,7 @@ sqlCtx, spark = getSparkConfig("local[*]", "Stage:OTBRANCH_Dimension")
 def masters_OTBRANCH_Dimension():
     
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

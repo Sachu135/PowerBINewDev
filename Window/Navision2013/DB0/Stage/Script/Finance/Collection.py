@@ -31,6 +31,7 @@ st = dt.datetime.now()
 sqlCtx, spark = getSparkConfig("local[*]", "Stage:Collection")
 def finance_Collection():
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

@@ -32,6 +32,7 @@ sqlCtx, spark = getSparkConfig("local[*]", "Stage:CashFlow")
 def finance_Cashflow():
 
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

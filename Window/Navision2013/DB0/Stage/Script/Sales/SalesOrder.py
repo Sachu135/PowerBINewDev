@@ -32,6 +32,7 @@ sqlCtx, spark = getSparkConfig("local[*]", "Stage:SalesOrder")
 def sales_SalesOrder():
 
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

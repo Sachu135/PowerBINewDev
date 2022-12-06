@@ -31,6 +31,7 @@ sqlCtx, spark = getSparkConfig("local[*]", "Stage:PROJECT_Dimension")
 def masters_PROJECT_Dimension():
    
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

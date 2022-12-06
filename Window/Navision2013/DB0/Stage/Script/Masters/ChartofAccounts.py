@@ -30,9 +30,8 @@ st = dt.datetime.now()
 sqlCtx, spark = getSparkConfig("local[*]", "Stage:Coa")
 def masters_Coa():
     
-    
-
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

@@ -31,6 +31,7 @@ sqlCtx, spark = getSparkConfig("local[*]", "Stage:Calendar")
 def masters_Calendar():
     
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

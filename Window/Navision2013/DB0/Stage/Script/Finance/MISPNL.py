@@ -32,6 +32,7 @@ sqlCtx, spark = getSparkConfig("local[*]", "Stage:MISPNL")
 def finance_MISPNL():
 
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

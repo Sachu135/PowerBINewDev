@@ -32,6 +32,7 @@ st = dt.datetime.now()
 sqlCtx, spark = getSparkConfig("local[*]", "Stage:PurchaseCRMemo")
 def purchase_PurchaseCRMemo():
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

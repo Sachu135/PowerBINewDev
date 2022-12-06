@@ -32,6 +32,7 @@ sqlCtx, spark = getSparkConfig("local[*]", "Stage:PurchaseCreditMemo")
 def purchase_PurchaseCreditMemo():
 
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger() 
         ConfTab='tblCompanyName'
         Query="(SELECT *\

@@ -31,6 +31,7 @@ sqlCtx, spark = getSparkConfig("local[*]", "Stage:Location")
 def masters_Location():
     
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

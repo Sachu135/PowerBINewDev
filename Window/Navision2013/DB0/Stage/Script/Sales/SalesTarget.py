@@ -31,6 +31,7 @@ st = dt.datetime.now()
 sqlCtx, spark = getSparkConfig("local[*]", "Stage:SalesTarget")
 def sales_SalesTarget():
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

@@ -29,9 +29,8 @@ apmode = 'append'
 st = dt.datetime.now()
 sqlCtx, spark = getSparkConfig("local[*]", "Stage:TARGETPROD_Dimension")
 def masters_TARGETPROD_Dimension():
-    
-
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\

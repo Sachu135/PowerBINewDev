@@ -32,6 +32,7 @@ def masters_BRANCH_Dimension():
     
 
     try:
+        finalDF = spark.createDataFrame([], StructType([]))
         logger =Logger()
         ConfTab='tblCompanyName'
         Query="(SELECT *\
