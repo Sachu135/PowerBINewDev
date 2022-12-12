@@ -44,7 +44,7 @@ def purchase_PurchasePayment():
                 PurchasePayment = Kockpit.RenameDuplicateColumns(PurchasePayment)
                 cond2=[PurchasePayment.DocumentNo__1 == pih.NO_]
                 PurchasePayment=Kockpit.LJOIN(PurchasePayment,pih,cond2)
-                PurchasePayment.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchasePayment")
+                PurchasePayment.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchasePayment")
                 logger.endExecution()
              
                 try:

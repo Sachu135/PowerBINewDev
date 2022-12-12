@@ -73,7 +73,7 @@ def purchase_PurchaseArchive2():
                         .withColumn('Nod',when(Purchase.NODays<=(MaxLimit), Purchase.NODays).otherwise(Purchase.Nod))
             Purchase = Purchase.join(DSE,"DimensionSetID",'left')
             Purchase = Kockpit.RenameDuplicateColumns(Purchase)
-            Purchase.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseArchive2")
+            Purchase.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseArchive2")
                   
             logger.endExecution()
              

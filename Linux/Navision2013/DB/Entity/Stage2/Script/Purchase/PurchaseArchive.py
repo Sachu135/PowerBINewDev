@@ -57,7 +57,7 @@ def purchase_PurchaseArchive():
                 Purchase = Kockpit.LJOIN(Purchase,ph,cond2)
                 Purchase = Purchase.join(DSE,"DimensionSetID",'left')
                 Purchase = Kockpit.RenameDuplicateColumns(Purchase)
-                Purchase.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseArchive")   
+                Purchase.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseArchive")   
                 logger.endExecution()
                  
                 try:

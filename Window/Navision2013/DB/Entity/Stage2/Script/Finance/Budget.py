@@ -49,7 +49,7 @@ def finance_Budget():
                                  .withColumn('LinkDateKey',concat(GLB["DBName"],lit('|'),GLB["EntityName"],lit('|'),GLB["LinkDate"])).drop("Date")
                 DSE=spark.read.format("parquet").load(STAGE2_PATH+"/"+"Masters/DSE").drop("DBName","EntityName").drop("Link_CUSTOMER","Link_CUSTOMERKey","Link_EMPLOYEE","Link_EMPLOYEEKey","Link_BRANCH","Link_BRANCHKey","Link_TARGETPROD","Link_TARGETPRODKey","Link_OTBRANCH","Link_OTBRANCHKey","Link_PRODUCT","Link_PRODUCTKey","Link_SALESPER","Link_SALESPERKey","Link_VENDOR","Link_VENDORKey","Link_PROJECT","Link_PROJECTKey")
                 GLB = GLB.join(DSE,"DimensionSetID",'left')  
-                GLB.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/Budget")
+                GLB.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/Budget")
                  
                 logger.endExecution()
                 

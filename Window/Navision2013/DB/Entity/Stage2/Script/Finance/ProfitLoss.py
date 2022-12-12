@@ -87,7 +87,7 @@ def finance_ProfitLoss():
                 GLEntry=GLEntry.drop("GlobalDimension1Code","GlobalDimension12Code","GlobalDimension1Code13","GlobalDimension14Code","GlobalDimension1Code2")
                 GLEntry.cache()
                 print(GLEntry.count())
-                GLEntry.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/ProfitLoss")
+                GLEntry.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/ProfitLoss")
                 
                 logger.endExecution()
                 try:

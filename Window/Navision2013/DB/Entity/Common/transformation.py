@@ -24,8 +24,6 @@ from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf as Kockpit
 
-
-
 from Stage1.Script.DataIngestion import Reload
 
 
@@ -108,7 +106,7 @@ try:
             sales_Sales()
             sales_SalesOrder()
             sales_SalesTarget()
-#               
+
         #------------------------------------ Purchase --------------------------------------
         if moduleName == '' or moduleName == 'Purchase':
             purchase_PurchaseInvoice()
@@ -129,7 +127,7 @@ try:
             finance_Budget()
             finance_MISPNL()
             finance_ProfitLoss()
-#             
+
         
         #------------------------------------ Inventory --------------------------------------
         if moduleName == '' or moduleName == 'Inventory':

@@ -39,7 +39,7 @@ def masters_Location():
                 result_df = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])
                 result_df = result_df.select([F.col(col).alias(col.replace("(","")) for col in result_df.columns])
                 result_df = result_df.select([F.col(col).alias(col.replace(")","")) for col in result_df.columns])
-                result_df.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/Location")
+                result_df.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/Location")
                 
                 logger.endExecution()
                 try:

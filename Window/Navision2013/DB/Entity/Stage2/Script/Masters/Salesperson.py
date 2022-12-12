@@ -49,7 +49,7 @@ def masters_Salesperson():
                 finalDF = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])
                 finalDF = finalDF.select([F.col(col).alias(col.replace("(","")) for col in finalDF.columns])
                 finalDF = finalDF.select([F.col(col).alias(col.replace(")","")) for col in finalDF.columns])
-                finalDF.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/Salesperson")
+                finalDF.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/Salesperson")
                 
                 logger.endExecution()
                 try:

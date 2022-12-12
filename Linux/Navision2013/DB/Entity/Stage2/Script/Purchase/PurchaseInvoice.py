@@ -185,7 +185,7 @@ def purchase_PurchaseInvoice():
                 Purchase = Kockpit.RenameDuplicateColumns(Purchase).drop("expectedreceiptdate_1","LineNo__1","LinkRcptKey_1")
                 Purchase.cache()
                 print(Purchase.count())
-                Purchase.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseInvoice")
+                Purchase.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseInvoice")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]

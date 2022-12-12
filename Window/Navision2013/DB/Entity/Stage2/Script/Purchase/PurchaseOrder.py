@@ -77,7 +77,7 @@ def purchase_PurchaseOrder():
                             .withColumn('Nod',when(PO.NOD_OrderDate<=(MaxLimit), PO.NOD_OrderDate).otherwise(PO.Nod))
                 finalDF = PO.join(DSE,"DimensionSetID",'left')
                 finalDF = RenameDuplicateColumns(finalDF).drop("locationtype")
-                finalDF.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseOrder")
+                finalDF.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseOrder")
                 logger.endExecution()
                 
                 try:

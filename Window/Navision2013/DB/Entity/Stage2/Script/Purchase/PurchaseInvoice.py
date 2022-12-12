@@ -194,7 +194,7 @@ def purchase_PurchaseInvoice():
                 Purchase = Kockpit.LJOIN(Purchase,pt,cond4)
                 Purchase = Kockpit.RenameDuplicateColumns(Purchase).drop("expectedreceiptdate_1","LineNo__1","LinkRcptKey_1")
                 Purchase.cache()
-                Purchase.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseInvoice")
+                Purchase.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/PurchaseInvoice")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]

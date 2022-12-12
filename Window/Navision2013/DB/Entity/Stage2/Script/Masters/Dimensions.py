@@ -110,7 +110,7 @@ def masters_Dimensions():
                         records = records.select(*(col(x).alias(re.sub('[)+]','', x)) for ix,x in enumerate(records.columns)))
                         records.cache()
                         print(records.count())
-                        records.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/"+table+"_Dimension")
+                        records.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/"+table+"_Dimension")
                            
                 logger.endExecution()
                 try:

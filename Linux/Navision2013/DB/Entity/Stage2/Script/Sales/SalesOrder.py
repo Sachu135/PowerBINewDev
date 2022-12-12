@@ -61,7 +61,7 @@ def sales_SalesOrder():
                 finalDF = finalDF.withColumn('LinkItemKey',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["ItemNo_"]))\
                             .withColumn('LinkDateKey',concat(finalDF["DBName"],lit('|'),finalDF["EntityName"],lit('|'),finalDF["PostingDate"])).drop('ItemNo_')
                 finalDF = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])
-                finalDF.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/SalesOrder")
+                finalDF.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/SalesOrder")
     
                 logger.endExecution()
             

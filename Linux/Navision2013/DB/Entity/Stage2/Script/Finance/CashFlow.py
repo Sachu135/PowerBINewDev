@@ -156,7 +156,7 @@ def finance_CashFlow():
                     if index==0:
                         Duplicate_GLEntry = GLEntry_Dummy
                     else:
-                        Duplicate_GLEntry = CONCATENATE(Duplicate_GLEntry,GLEntry_Dummy,spark)    
+                        Duplicate_GLEntry = Duplicate_GLEntry.unionByName(GLEntry_Dummy,allowMissingColumns=True)  
                 Duplicate_GLEntry = Duplicate_GLEntry.withColumn('Income_Balance',lit('5'))
                 Duplicate_GLEntry = Duplicate_GLEntry.withColumn('Amount',Duplicate_GLEntry['Amount'].cast('decimal(30,4)'))
                 OpeningCash_GLEntry = Duplicate_GLEntry.filter(Duplicate_GLEntry['GLAccount'].isin(GL_List_CashBeginning))
@@ -180,9 +180,9 @@ def finance_CashFlow():
                 OpeningCash_GLEntry = OpeningCash_GLEntry.drop('FY Year')\
                                                         .withColumn('LinkDate',to_date(OpeningCash_GLEntry['LinkDate']))
                 GLEntry = GLEntry.filter(~(GLEntry['GLAccount'].isin(GL_List_CashClosing)))
-                GLEntry = CONCATENATE( GLEntry,OpeningCash_GLEntry, spark)
-                GLEntry = CONCATENATE(GLEntry,ClosingCash_GLEntry,spark)
-                GLEntry = CONCATENATE(GLEntry,Duplicate_GLEntry, spark)
+                GLEntry = GLEntry.unionByName(OpeningCash_GLEntry,allowMissingColumns=True)
+                GLEntry = GLEntry.unionByName(ClosingCash_GLEntry,allowMissingColumns=True)
+                GLEntry = GLEntry.unionByName(Duplicate_GLEntry,allowMissingColumns=True)
                 GLEntry =  GLEntry.join(DSE,"DimensionSetID",'left')  
                 GLEntry=GLEntry.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
                 GLEntry = GLEntry.withColumn("LinkDateKey",concat_ws("|",lit(DBName),lit(EntityName),GLEntry.LinkDate))\
@@ -192,7 +192,7 @@ def finance_CashFlow():
                 GLEntry = GLEntry.groupBy('LinkDate','GLAccount',"Link_GLAccount_Key",'LinkDateKey',
                                           'DBName','EntityName','Income_Balance').agg({'Amount':'sum'})\
                                     .withColumnRenamed('sum(Amount)','Amount')                
-                GLEntry.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/CashFlow")
+                GLEntry.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/CashFlow")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]

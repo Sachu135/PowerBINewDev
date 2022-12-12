@@ -121,10 +121,11 @@ def finance_MISPNL():
                 MIS = df_con.withColumn('DBName',lit(DBName))\
                             .withColumn('EntityName',lit(EntityName))
                 MIS = MIS.withColumn('Link_GL_Key',concat(MIS['DBName'],lit('|'),MIS['EntityName'],lit('|'),MIS['MISKEY']))
-                MIS=CONCATENATE(MIS,Acc_Sche_null,spark)
+        
+                MIS = MIS.unionByName(Acc_Sche_null,allowMissingColumns=True)
                 MIS.cache()
                 print(MIS.count())
-                MIS.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/MISPNL")
+                MIS.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/MISPNL")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]
@@ -134,7 +135,7 @@ def finance_MISPNL():
                 log_dict = logger.getSuccessLoggedRecord("Finance.MISPNL", DBName, EntityName, MIS.count(), len(MIS.columns), IDEorBatch)
                 log_df = spark.createDataFrame(log_dict, logger.getSchema())
                 log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
-                #
+               
             except Exception as ex:
                 exc_type,exc_value,exc_traceback=sys.exc_info()
                 print("Error:",ex)

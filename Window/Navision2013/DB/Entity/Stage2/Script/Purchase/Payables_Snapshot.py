@@ -191,7 +191,7 @@ def purchase_Payables_Snapshot():
                 finalDF = APsnapshots.join(DSE,"DimensionSetID",'left')
                 finalDF = RenameDuplicateColumns(finalDF)
                 finalDF.cache()
-                finalDF .coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Payables_Snapshot")
+                finalDF.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Payables_Snapshot")
                 logger.endExecution()
                 
                 try:

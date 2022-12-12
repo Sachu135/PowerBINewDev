@@ -192,15 +192,19 @@ def purchase_PurchaseCreditMemo():
                 ValueEntry = Kockpit.LJOIN(ValueEntry,dse,vcond)
                 ValueEntry = ValueEntry.withColumn("PostingDate",col("PostingDate").cast('string'))\
                         .withColumn("LinkDate",col("LinkDate").cast('string')).drop('DimSetID1')
+                ValueEntry.cache()
+                print(ValueEntry.count())
                 Purchase = Kockpit.RenameDuplicateColumns(Purchase).drop("Locationtype")
                 Purchase = Purchase.withColumn("PostingDate",col("PostingDate").cast('string'))\
                             .withColumn("ExpectedReceiptDate",col("ExpectedReceiptDate").cast('string'))\
                             .drop('LocationCode','Amount','ServiceTaxSHECessAmount','Sell-toCustomerName2','GLCode','Link_GDDrop')
-                
-                Purchase=CONCATENATE(Purchase,ValueEntry,spark)
-                Purchase = Purchase.withColumnRenamed('LinkPurchaseRep','LinkPurchaser')
                 Purchase.cache()
                 print(Purchase.count())
+                print(str((dt.datetime.now()-st).total_seconds()))
+                Purchase = Purchase.unionByName(ValueEntry,allowMissingColumns=True)
+                print(str((dt.datetime.now()-st).total_seconds()))
+                Purchase = Purchase.withColumnRenamed('LinkPurchaseRep','LinkPurchaser')
+               
                 Purchase = Purchase.drop('BudColumn')
                 Purchase=Purchase.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
                     
@@ -210,11 +214,12 @@ def purchase_PurchaseCreditMemo():
                                     .withColumn('LinkPurchaserKey',concat_ws('|',Purchase.DBName,Purchase.EntityName,Purchase.LinkPurchaser))\
                                     .withColumn('LinkItemKey',concat_ws('|',Purchase.DBName,Purchase.EntityName,Purchase.LinkItem))\
                                     .withColumn('LinkLocationKey',concat_ws('|',Purchase.DBName,Purchase.EntityName,Purchase.LinkLocation))
-                PurchaseInv=CONCATENATE(Purchase,PurchaseInvoice,spark)
+                PurchaseInv = Purchase.unionByName(PurchaseInvoice,allowMissingColumns=True)
                 PurchaseInv = PurchaseInv.na.fill({"PayableAmount":0})
+                print(str((dt.datetime.now()-st).total_seconds()))
                 PurchaseInv.cache()
                 print(PurchaseInv.count())
-                PurchaseInv.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Purchase") 
+                PurchaseInv.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Purchase") 
                 logger.endExecution()
              
                 try:

@@ -178,7 +178,7 @@ def finance_BalanceSheet():
                 GL_Acc_Entry2 = GL_Acc_Entry2.select('Entry_No','PostingDate','PostingYear','PostingMonth'
                                                    ,'LinkDate','Document_No','GL_Description','Amount'
                                                    ,'SourceCode','DebitAmount','CreditAmount','Income_Balance','GLAccount')
-                GLEntry_Temp= CONCATENATE(GL_Acc_Entry2,GLEntry_Temp, spark)
+                GLEntry_Temp = GL_Acc_Entry2.unionByName(GLEntry_Temp,allowMissingColumns=True)
                 GL_Two = GLEntry_Temp.withColumn('Year_X',year('PostingDate'))
                 GL_Two = GL_Two.withColumn('Month_X',month('PostingDate'))
                 GL_Two = GL_Two.withColumn('YMX',concat_ws('_','Year_X','Month_X'))
@@ -236,7 +236,7 @@ def finance_BalanceSheet():
                 GLEntry_Temp = GLEntry_Temp.withColumn('Amount',round('Amount',5))
                 GLEntry_Temp.cache()
                 print(GLEntry_Temp.count())
-                GLEntry_Temp.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/BalanceSheet")
+                GLEntry_Temp.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/BalanceSheet")
                 
                 logger.endExecution()
                     

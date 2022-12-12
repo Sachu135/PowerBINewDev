@@ -120,10 +120,10 @@ def finance_MISPNL():
                 MIS = df_con.withColumn('DBName',lit(DBName))\
                             .withColumn('EntityName',lit(EntityName))
                 MIS = MIS.withColumn('Link_GL_Key',concat(MIS['DBName'],lit('|'),MIS['EntityName'],lit('|'),MIS['MISKEY']))
-                MIS=CONCATENATE(MIS,Acc_Sche_null,spark)
+                MIS = MIS.unionByName(Acc_Sche_null,allowMissingColumns=True)
                 MIS.cache()
                 print(MIS.count())
-                MIS.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/MISPNL")
+                MIS.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/MISPNL")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]

@@ -36,7 +36,7 @@ def masters_employee():
                 result_df = finalDF.select([F.col(col).alias(col.replace(" ","")) for col in finalDF.columns])
                 result_df = result_df.select([F.col(col).alias(col.replace("(","")) for col in result_df.columns])
                 result_df = result_df.select([F.col(col).alias(col.replace(")","")) for col in result_df.columns])
-                result_df.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/Employee")
+                result_df.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/Employee")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]

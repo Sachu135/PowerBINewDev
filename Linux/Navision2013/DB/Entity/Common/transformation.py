@@ -26,7 +26,6 @@ from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf 
 
-
 from Stage1.Script.DataIngestion import Reload
 from Stage2.Script.Masters.Calendar import masters_calendar
 from Stage2.Script.Masters.ChartofAccounts import masters_coa
@@ -100,9 +99,9 @@ try:
         purchase_Payables_Snapshot()
         purchase_PurchaseArchive()
         purchase_PurchaseArchive2()
+        purchase_PurchaseInvoice()
         purchase_PurchaseCreditMemo()
         purchase_PurchaseCRMemo()
-        purchase_PurchaseInvoice() 
         purchase_PurchaseOrder() 
         purchase_PurchasePayment()         
     # #------------------------------------ Finance --------------------------------------

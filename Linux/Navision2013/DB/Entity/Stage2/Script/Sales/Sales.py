@@ -222,15 +222,15 @@ def sales_Sales():
                 GLEntry_Sales = GLEntry_Sales.join(DSE,"DimensionSetID",'left')  
                 GLEntry_Sales.cache()
                 print(GLEntry_Sales.count())
-                GLEntry_Sales.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/SalesGLEntry")
+                GLEntry_Sales.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/SalesGLEntry")
                 GLEntry_DE = GLEntry_DE.join(DSE,"DimensionSetID",'left')
                 GLEntry_DE.cache()
                 print(GLEntry_DE.count())
-                GLEntry_DE.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/ManualCOGS")   
+                GLEntry_DE.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/ManualCOGS")   
                 finalDF.cache()
                 print(finalDF.count())
                 finalDF=finalDF.drop('SystemEntry','Item_No')
-                finalDF.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/Sales")
+                finalDF.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/Sales")
     
                 logger.endExecution()
                 try:

@@ -174,7 +174,7 @@ def masters_coa():
                 records = records.join(BS_Headers,'GLAccount','left')    
                 record_level7 = records.select('GLAccount','Level'+str(max(Inde)))
                 records = records.withColumn("Link_PLReportHeader" , concat(records['DBName'],lit("|"),records['EntityName'],lit("|"),records['PLReportHeader'])).drop( 'PLReportHeader')
-                records.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/ChartofAccounts")
+                records.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/ChartofAccounts")
                 
                 logger.endExecution()
                 try:

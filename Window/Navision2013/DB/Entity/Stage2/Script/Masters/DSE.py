@@ -53,7 +53,7 @@ def masters_DSE():
                                         .otherwise(concat_ws('|',lit(DBName),lit(EntityName),col(vdim))))\
                                         .drop('DimensionCode')    
                 finalDF = query_DSE_ID.withColumn("EntityName",lit(EntityName)).withColumn("DBName",lit(DBName))
-                finalDF.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/DSE")
+                finalDF.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Masters/DSE")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]

@@ -199,7 +199,7 @@ def purchase_PurchaseCreditMemo():
                             .withColumn("ExpectedReceiptDate",col("ExpectedReceiptDate").cast('string'))\
                             .drop('LocationCode','Amount','ServiceTaxSHECessAmount','Sell-toCustomerName2','GLCode','Link_GDDrop')
                 
-                Purchase=CONCATENATE(Purchase,ValueEntry,spark)
+                Purchase = Purchase.unionByName(ValueEntry,allowMissingColumns=True)
                 Purchase = Purchase.withColumnRenamed('LinkPurchaseRep','LinkPurchaser')
                 Purchase.cache()
                 print(Purchase.count())
@@ -212,11 +212,11 @@ def purchase_PurchaseCreditMemo():
                                     .withColumn('LinkPurchaserKey',concat_ws('|',Purchase.DBName,Purchase.EntityName,Purchase.LinkPurchaser))\
                                     .withColumn('LinkItemKey',concat_ws('|',Purchase.DBName,Purchase.EntityName,Purchase.LinkItem))\
                                     .withColumn('LinkLocationKey',concat_ws('|',Purchase.DBName,Purchase.EntityName,Purchase.LinkLocation))
-                PurchaseInv=CONCATENATE(Purchase,PurchaseInvoice,spark)
+                PurchaseInv = Purchase.unionByName(PurchaseInvoice,allowMissingColumns=True)
                 PurchaseInv = PurchaseInv.na.fill({"PayableAmount":0})
                 PurchaseInv.cache()
                 print(PurchaseInv.count())
-                PurchaseInv.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Purchase") 
+                PurchaseInv.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Purchase/Purchase") 
                 logger.endExecution()
              
                 try:

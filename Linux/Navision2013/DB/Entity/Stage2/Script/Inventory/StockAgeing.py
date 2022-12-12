@@ -173,7 +173,7 @@ def inventory_StockAgeing():
                 finalDF.cache()
                 print(finalDF.count())
                 finalDF = RenameDuplicateColumns(finalDF).drop("Locationtype")
-                finalDF.coalesce(1).write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Inventory/StockAgeing")
+                finalDF.write.option("maxRecordsPerFile", 10000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Inventory/StockAgeing")
                
                 logger.endExecution()
                 try:

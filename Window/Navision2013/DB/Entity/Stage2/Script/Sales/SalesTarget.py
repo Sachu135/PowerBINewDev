@@ -65,7 +65,7 @@ def sales_SalesTarget():
                                                    & (GLB.GLAccount<=GLRange.select('ToGL').collect()[i]['ToGL']))              
                 GLB=GLB.filter(GLB['BudgetName'].like('SALESTGT%'))\
                          .filter(Range)
-                GLB.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/SalesTarget")
+                GLB.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Sales/SalesTarget")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]

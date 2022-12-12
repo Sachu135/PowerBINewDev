@@ -12,8 +12,6 @@ from pyspark.sql import functions as F
 import os, sys
 from os.path import dirname, join, abspath
 
-helpersDir = abspath(join(join(dirname(__file__), '..'), '..', '..'))
-sys.path.insert(0, helpersDir)
 Abs_Path = abspath(join(join(dirname(__file__), '..'), '..'))
 Kockpit_Path = abspath(join(join(dirname(__file__), '..', '..', '..', '..')))
 DBNamepath = abspath(join(join(dirname(__file__), '..'), '..', '..'))
@@ -64,11 +62,11 @@ def dataFrameWriterIntoHDFS(colSelector, tblFullName, sqlurl, hdfsLoc, dirnameIn
     tblQuery = "(SELECT " + colSelector + " FROM [" + tblFullName + "]) AS FullWrite"
     tableDataDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl, dbtable=tblQuery,
                                                                        driver=ConnectionInfo.SQL_SERVER_DRIVER,
-                                                                       fetchsize=500000).load()
+                                                                       fetchsize=100000,batchsize=100000).load()
 
     tableDataDF = tableDataDF.select(
         [F.col(col).alias(col.replace(' ', '').replace('(', '').replace(')', '')) for col in tableDataDF.columns])
-    tableDataDF.coalesce(1).write.mode("overwrite").option("overwriteSchema", "true").save(hdfsLoc)
+    tableDataDF.write.option("maxRecordsPerFile", 5000).mode("overwrite").option("overwriteSchema", "true").save(hdfsLoc)
 
 
 def schemaWriterIntoHDFS(sqlurl, HDFSDatabase, SQLNAVSTRING):
@@ -166,7 +164,6 @@ def full_reload():
         if entityLoc == ENTITY_LOCATION_LOCAL:
 
             STAGE1_PATH = Kockpit_Path + "/" + DBName + "/" + EntityName + "/Stage1"
-            print(STAGE1_PATH)
             sqlurl = ConnectionInfo.SQL_URL.format(ac.config["SourceDBConnection"]['url'],
                                                    str(ac.config["SourceDBConnection"]["port"]), dbName,
                                                    ac.config["SourceDBConnection"]['userName'],
@@ -250,26 +247,49 @@ def full_reload():
 
 
 def Configurator(ConfTab, STAGE1_Configurator_Path, DB, EntityName):
-    Query = "(SELECT *\
-                FROM " + ConfiguratorDbInfo.Schema + "." + chr(34) + ConfTab + chr(34) + ") AS df"
-    Configurator_Data = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,
-                                                          user=ConfiguratorDbInfo.props["user"],
-                                                          password=ConfiguratorDbInfo.props["password"],
-                                                          driver=ConfiguratorDbInfo.props["driver"]).load()
-
-    Configurator_Data = Configurator_Data.select(
-        [F.col(col).alias(col.replace(" ", "")) for col in Configurator_Data.columns])
-    Configurator_Data = Configurator_Data.select(
-        [F.col(col).alias(col.replace("(", "")) for col in Configurator_Data.columns])
-    Configurator_Data = Configurator_Data.select(
-        [F.col(col).alias(col.replace(")", "")) for col in Configurator_Data.columns])
-    if all(x in Configurator_Data.columns for x in ['DBName', 'EntityName']):
-        Configurator_Data = Configurator_Data.filter(
-            (Configurator_Data['DBName'] == DB) & (Configurator_Data['EntityName'] == EntityName))
-
-    Configurator_Data.write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(
-        STAGE1_Configurator_Path + ConfTab)
-
+    try:
+        logger=Logger() 
+        CompanyNamewos=ConfTab.replace(" ","")
+        Query = "(SELECT *\
+                    FROM " + ConfiguratorDbInfo.Schema + "." + chr(34) + ConfTab + chr(34) + ") AS df"
+        Configurator_Data = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl, dbtable=Query,
+                                                              user=ConfiguratorDbInfo.props["user"],
+                                                              password=ConfiguratorDbInfo.props["password"],
+                                                              driver=ConfiguratorDbInfo.props["driver"]).load()
+    
+        Configurator_Data = Configurator_Data.select(
+            [F.col(col).alias(col.replace(" ", "")) for col in Configurator_Data.columns])
+        Configurator_Data = Configurator_Data.select(
+            [F.col(col).alias(col.replace("(", "")) for col in Configurator_Data.columns])
+        Configurator_Data = Configurator_Data.select(
+            [F.col(col).alias(col.replace(")", "")) for col in Configurator_Data.columns])
+        if all(x in Configurator_Data.columns for x in ['DBName', 'EntityName']):
+            Configurator_Data = Configurator_Data.filter(
+                (Configurator_Data['DBName'] == DB) & (Configurator_Data['EntityName'] == EntityName))
+    
+        Configurator_Data.write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(
+            STAGE1_Configurator_Path + ConfTab)
+    
+    except Exception as ex:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    print("Error:", ex)
+                    print("type - " + str(exc_type))
+                    print("File - " + exc_traceback.tb_frame.f_code.co_filename)
+                    print("Error Line No. - " + str(exc_traceback.tb_lineno))
+                    ex = str(ex)
+                    logger.endExecution()
+                    try:
+                        IDEorBatch = sys.argv[2]
+                    except Exception as e:
+                        IDEorBatch = "IDLE"
+                    os.system(
+                        "spark-submit " + Kockpit_Path + "/Email.py 1  DataIngestion " + CompanyNamewos + " " + entityLocation + " " + str(
+                            exc_traceback.tb_lineno) + "")
+                    log_dict = logger.getErrorLoggedRecord('DataIngestion', DBName, EntityName, str(ex),
+                                                           exc_traceback.tb_lineno, IDEorBatch)
+                    log_df = spark.createDataFrame(log_dict, logger.getSchema())
+                    log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append',
+                                      properties=PostgresDbInfo.props)
 
 def Config_reload():
     table_names = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl,

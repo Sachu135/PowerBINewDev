@@ -39,7 +39,7 @@ def finance_Collection():
                 cond = [dcleDF["Cust_LedgerEntryNo_"] == cleDF["EntryNo_"]]
                 finalDF = dcleDF.join(cleDF, cond, 'left')
                 finalDF = RenameDuplicateColumns(finalDF)
-                finalDF.coalesce(1).write.format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/Collection")
+                finalDF.write.option("maxRecordsPerFile", 10000).format("parquet").mode("overwrite").option("overwriteSchema", "true").save(STAGE2_PATH+"/"+"Finance/Collection")
                 logger.endExecution()
                 try:
                     IDEorBatch = sys.argv[1]
