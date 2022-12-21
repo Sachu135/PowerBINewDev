@@ -13,10 +13,22 @@ from multiprocessing.pool import ThreadPool
 import urllib.request
 import os,sys
 from os.path import dirname, join, abspath
-Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..')))
-DB_path =abspath(join(join(dirname(__file__),'..','..')))
+Kockpit_Path =abspath(join(join(dirname(__file__),'..','..')))
+DB_path =abspath(join(join(dirname(__file__),'..')))
 sys.path.insert(0,'../../')
 sys.path.insert(0, DB_path)
+root_directory =abspath(join(join(dirname(__file__),'..','..')))
+root_directory=root_directory+"/"
+DBList=[]
+for folders in os.listdir(root_directory):
+    if os.path.isdir(os.path.join(root_directory,folders)):
+        if 'DB' in folders:
+            if 'DB0' in folders:
+                pass
+            else:
+                DBList.insert(0,folders )
+Connection =abspath(join(join(dirname(__file__), '..'),'..',DBList[0]))
+sys.path.insert(0, Connection)
 from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf as Kockpit

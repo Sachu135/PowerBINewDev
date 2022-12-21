@@ -149,8 +149,7 @@ try:
             finance_Budget()
             finance_MISPNL()
             finance_ProfitLoss()
-            PowerBI_Finance_Refresh() 
-#              
+            PowerBI_Finance_Refresh()         
          
          #------------------------------------ Inventory --------------------------------------
         if moduleName == '' or moduleName == 'Inventory':
