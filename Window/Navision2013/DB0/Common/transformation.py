@@ -1,4 +1,5 @@
 import datetime as dt
+import datetime
 from pyspark.sql import functions as F
 import pandas as pd
 import os,sys,subprocess
@@ -19,16 +20,6 @@ for folders in os.listdir(root_directory):
                 DBList.insert(0,folders )
 Connection =abspath(join(join(dirname(__file__), '..'),'..',DBList[0]))
 sys.path.insert(0, Connection)
-
-from Configuration.Constant import *
-from Configuration.AppConfig import * 
-from Configuration.Constant import *
-from Configuration.udf import *
-from Configuration import udf as Kockpit
-from DB0 import Common
-from DB0 import Stage
-
-
 
 from Stage.Script.Masters.Calendar import masters_Calendar
 from Stage.Script.Masters.ChartofAccounts import masters_Coa
@@ -92,7 +83,7 @@ moduleName = sys.argv[1] if len(sys.argv) > 1 else ''
 
 
 try:   
-        print('Transformation start: ', datetime.datetime.now())
+        print('DB0 Transformation start: ', datetime.datetime.now())
         
          #------------------------------------ Masters -------------------------------------
         if moduleName == '' or moduleName == 'Masters':
@@ -159,7 +150,7 @@ try:
         
         
 
-        print('Transformation end: ', datetime.datetime.now())
+        print('DB0 Transformation end: ', datetime.datetime.now())
 except Exception as ex:
         print(ex)
         exc_type,exc_value,exc_traceback=sys.exc_info()

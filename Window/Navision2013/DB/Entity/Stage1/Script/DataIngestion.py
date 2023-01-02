@@ -16,12 +16,14 @@ Abs_Path = abspath(join(join(dirname(__file__), '..'), '..'))
 Kockpit_Path = abspath(join(join(dirname(__file__), '..', '..', '..', '..')))
 DBNamepath = abspath(join(join(dirname(__file__), '..'), '..', '..'))
 EntityNamepath = abspath(join(join(dirname(__file__), '..'), '..'))
+sys.path.insert(0, DBNamepath)
+sys.path.insert(0, EntityNamepath)
 DBName = os.path.split(DBNamepath)
 EntityName = os.path.split(EntityNamepath)
+
 DBName = DBName[1]
 EntityName = EntityName[1]
 ENTITY_LOCATION_LOCAL = DBName + EntityName
-
 entityLocation = DBName + EntityName
 Stage1_Path = abspath(join(join(dirname(__file__), '..')))
 STAGE1_Configurator_Path = Stage1_Path + "/ConfiguratorData/"
@@ -66,7 +68,7 @@ def dataFrameWriterIntoHDFS(colSelector, tblFullName, sqlurl, hdfsLoc, dirnameIn
 
     tableDataDF = tableDataDF.select(
         [F.col(col).alias(col.replace(' ', '').replace('(', '').replace(')', '')) for col in tableDataDF.columns])
-    tableDataDF.write.option("maxRecordsPerFile", 5000).mode("overwrite").option("overwriteSchema", "true").save(hdfsLoc)
+    tableDataDF.write.option("maxRecordsPerFile", 20000).mode("overwrite").option("overwriteSchema", "true").save(hdfsLoc)
 
 
 def schemaWriterIntoHDFS(sqlurl, HDFSDatabase, SQLNAVSTRING):
@@ -366,4 +368,4 @@ def Reload(Type):
 
 
 if __name__ == "__main__":
-    Reload('FULL')
+    Reload('')

@@ -23,6 +23,8 @@ entityLocation = DBName+EntityName
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 sqlCtx,spark=getSparkConfig(SPARK_MASTER, "Stage2:PurchasePayment")
+import delta
+from delta.tables import *
 def purchase_PurchasePayment():
     for dbe in config["DbEntities"]:
         if dbe['ActiveInactive']=='true' and  dbe['Location']==DBEntity:
@@ -68,5 +70,14 @@ def purchase_PurchasePayment():
                 log_df = spark.createDataFrame(log_dict, logger.getSchema())
                 log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
     print('purchase_PurchasePayment completed: ' + str((dt.datetime.now()-st).total_seconds()))
+def vacuum_PurchasePayment():
+                    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+                    vacuum_Path=STAGE2_PATH+"/"+"Purchase/PurchasePayment"
+                    fe = fs.exists(spark._jvm.org.apache.hadoop.fs.Path(vacuum_Path))
+                    if (fe):
+                        dtTable=DeltaTable.forPath(spark, vacuum_Path)
+                        dtTable.vacuum(1)
+                    else:
+                        print("HDFS Path Does Not Exist")
 if __name__ == "__main__":
     purchase_PurchasePayment()

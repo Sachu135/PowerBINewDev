@@ -15,7 +15,6 @@ from Configuration.AppConfig import *
 from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf as Kockpit
-
 Filepath = os.path.dirname(os.path.abspath(__file__))
 FilePathSplit = Filepath.split('/')
 DBName = FilePathSplit[-5]
@@ -26,6 +25,8 @@ STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"St
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 sqlCtx,spark=getSparkConfig(SPARK_MASTER, "Stage2:Finance-Collection")
+import delta
+from delta.tables import *
 def finance_Collection():
     cdate = datetime.datetime.now().strftime('%Y-%m-%d')
     for dbe in config["DbEntities"]:
@@ -68,6 +69,16 @@ def finance_Collection():
                 log_df = spark.createDataFrame(log_dict, logger.getSchema())
                 log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
     print('finance_Collection completed: ' + str((dt.datetime.now()-st).total_seconds()))
+def vacuum_Collection():
+                    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+                    vacuum_Path=STAGE2_PATH+"/"+"Finance/Collection"
+                    fe = fs.exists(spark._jvm.org.apache.hadoop.fs.Path(vacuum_Path))
+                    if (fe):
+                        
+                        dtTable=DeltaTable.forPath(spark, vacuum_Path)
+                        dtTable.vacuum(1)
+                    else:
+                        print("HDFS Path Does Not Exist")    
 if __name__ == "__main__":
     finance_Collection()     
     

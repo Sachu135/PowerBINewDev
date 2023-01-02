@@ -15,10 +15,12 @@ import pandas as pd
 import os,sys,subprocess
 from os.path import dirname, join, abspath
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..')))
-DB_path =abspath(join(join(dirname(__file__),'..')))
+DB_path =abspath(join(join(dirname(__file__),'..','..')))
+Entity_Path=abspath(join(join(dirname(__file__),'..')))
 st = dt.datetime.now()
 sys.path.insert(0,'../../')
 sys.path.insert(0, DB_path)
+sys.path.insert(0, Entity_Path)
 Conf_path =abspath(join(join(dirname(__file__),'..','..')))
 sys.path.insert(0, Conf_path)
 from Configuration import  AppConfig as ac
@@ -64,7 +66,6 @@ from Stage2.Script.Finance.ProfitLoss import finance_ProfitLoss
 from Stage2.Script.Inventory.IAP import inventory_IAP
 from Stage2.Script.Inventory.StockAgeing import inventory_StockAgeing
 
-
 print('Stage 2 Transformation: ', datetime.datetime.now())
 moduleName = sys.argv[1] if len(sys.argv) > 1 else ''
 
@@ -87,14 +88,14 @@ try:
         masters_Item()
         masters_employee()
         
-    # #------------------------------------ Sales ----------------------------------------
+    #------------------------------------ Sales ----------------------------------------
     if moduleName == '' or moduleName == 'Sales':
         sales_Receivables()
         sales_Receivables_Snapshot()
         sales_Sales()
         sales_SalesOrder()
         sales_SalesTarget()
-    # #------------------------------------ Purchase --------------------------------------
+    #------------------------------------ Purchase --------------------------------------
     if moduleName == '' or moduleName == 'Purchase':
         purchase_Payables_Snapshot()
         purchase_PurchaseArchive()
@@ -104,7 +105,7 @@ try:
         purchase_PurchaseCRMemo()
         purchase_PurchaseOrder() 
         purchase_PurchasePayment()         
-    # #------------------------------------ Finance --------------------------------------
+    #------------------------------------ Finance --------------------------------------
     if moduleName == '' or moduleName == 'Finance':
         finance_BalanceSheet()
         finance_Budget()
@@ -112,7 +113,7 @@ try:
         finance_Collection()   
         finance_MISPNL()
         finance_ProfitLoss()      
-    # #------------------------------------ Inventory --------------------------------------
+    #------------------------------------ Inventory --------------------------------------
     if moduleName == '' or moduleName == 'Inventory':
         inventory_IAP()  
         inventory_StockAgeing()       

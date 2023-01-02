@@ -29,6 +29,8 @@ STAGE1_Configurator_Path=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"St
 STAGE1_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage1/ParquetData"
 STAGE2_PATH=HDFS_PATH+DIR_PATH+"/" +DBName+"/" +EntityName+"/" +"Stage2/ParquetData"
 sqlCtx,spark=getSparkConfig(SPARK_MASTER, "Stage2:Purchase-Payables_Snapshot")
+import delta
+from delta.tables import *
 def purchase_Payables_Snapshot():
     cdate = datetime.datetime.now().strftime('%Y-%m-%d')
     for dbe in config["DbEntities"]:
@@ -218,6 +220,15 @@ def purchase_Payables_Snapshot():
                 log_df = spark.createDataFrame(log_dict, logger.getSchema())
                 log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)
     print('purchases_Payable_Snapshot completed: ' + str((dt.datetime.now()-st).total_seconds()))
+def vacuum_Payable_Snapshot():
+                    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+                    vacuum_Path=STAGE2_PATH+"/"+"Purchase/Payables_Snapshot"
+                    fe = fs.exists(spark._jvm.org.apache.hadoop.fs.Path(vacuum_Path))
+                    if (fe):
+                        dtTable=DeltaTable.forPath(spark, vacuum_Path)
+                        dtTable.vacuum(1)
+                    else:
+                        print("HDFS Path Does Not Exist")
 if __name__ == "__main__":
     purchase_Payables_Snapshot()    
     

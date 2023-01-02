@@ -10,19 +10,18 @@ import pandas as pd
 import os,sys,subprocess
 
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..')))
-DB_path =abspath(join(join(dirname(__file__))))
+DB_path =abspath(join(join(dirname(__file__),'..','..')))
 Entity_Path=abspath(join(join(dirname(__file__),'..')))
-
 
 sys.path.insert(0,'../../')
 sys.path.insert(0, DB_path)
 sys.path.insert(0, Entity_Path)
 
-
 from Configuration.AppConfig import * 
 from Configuration.Constant import *
 from Configuration.udf import *
 from Configuration import udf as Kockpit
+
 
 from Stage1.Script.DataIngestion import Reload
 
@@ -54,8 +53,6 @@ from Stage2.Script.Purchase.PurchaseCRMemo import purchase_PurchaseCRMemo
 from Stage2.Script.Purchase.PurchaseInvoice import purchase_PurchaseInvoice
 from Stage2.Script.Purchase.PurchaseOrder import purchase_PurchaseOrder
 from Stage2.Script.Purchase.PurchasePayment import purchase_PurchasePayment
-
-
 
 
 from Stage2.Script.Finance.BalanceSheet import finance_BalanceSheet
@@ -106,7 +103,7 @@ try:
             sales_Sales()
             sales_SalesOrder()
             sales_SalesTarget()
-
+              
         #------------------------------------ Purchase --------------------------------------
         if moduleName == '' or moduleName == 'Purchase':
             purchase_PurchaseInvoice()
@@ -127,17 +124,13 @@ try:
             finance_Budget()
             finance_MISPNL()
             finance_ProfitLoss()
-
+      
         
         #------------------------------------ Inventory --------------------------------------
         if moduleName == '' or moduleName == 'Inventory':
             inventory_IAP()
             inventory_StockAgeing()
 
-
-            
-        
-        
 
         print('Transformation end: ', datetime.datetime.now())
 except Exception as ex:

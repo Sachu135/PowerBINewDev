@@ -198,11 +198,11 @@ def purchase_PurchaseCreditMemo():
                 Purchase = Purchase.withColumn("PostingDate",col("PostingDate").cast('string'))\
                             .withColumn("ExpectedReceiptDate",col("ExpectedReceiptDate").cast('string'))\
                             .drop('LocationCode','Amount','ServiceTaxSHECessAmount','Sell-toCustomerName2','GLCode','Link_GDDrop')
-                
-                Purchase = Purchase.unionByName(ValueEntry,allowMissingColumns=True)
-                Purchase = Purchase.withColumnRenamed('LinkPurchaseRep','LinkPurchaser')
                 Purchase.cache()
                 print(Purchase.count())
+                Purchase = Purchase.unionByName(ValueEntry,allowMissingColumns=True)
+                Purchase = Purchase.withColumnRenamed('LinkPurchaseRep','LinkPurchaser')
+                
                 Purchase = Purchase.drop('BudColumn')
                 Purchase=Purchase.withColumn("DBName",concat(lit(DBName))).withColumn("EntityName",concat(lit(EntityName)))
                     

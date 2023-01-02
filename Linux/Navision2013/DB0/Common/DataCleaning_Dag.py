@@ -11,13 +11,11 @@ from os.path import dirname, join, abspath
 import datetime as dt
 import re
 DBList=[]
-EntList=[]
-path_f=[]
-list_f=[]
-dir_list=[]
+Script_Path=[]
+
 c='Common'
 root_directory=abspath(join(join(dirname(__file__),'..','..')))
-kockpit_path="/home/hadoop/KOCKPIT"
+kockpit_path=""
 
 sys.path.insert(0, kockpit_path)
 for folders in os.listdir(kockpit_path):
@@ -30,9 +28,7 @@ DBList=sorted(DBList)
 DBList.append(DBList.pop(DBList.index('DB0')))
 for d in DBList:
     if 'DB0' in d:
-        path=os.path.join(kockpit_path,d,c)
-        path_f.append(path)
-        
+        pass
     else:
         Connection =os.path.join(kockpit_path,d)
         sys.path.insert(0, Connection)
@@ -40,28 +36,36 @@ for d in DBList:
             if os.path.isdir(os.path.join(Connection,folders)):
                 if 'E' in folders: 
                     path=os.path.join(kockpit_path,d,folders,c)
-                    path_f.append(path)
-
+                    Script_Path.append(path)
 local_tz = pendulum.timezone("Asia/Calcutta")
 dagargs = {
     'owner': 'kockpit',
     'depends_on_past': False,
-    'start_date': datetime(2022, 7,19, tzinfo=local_tz),
-    'email': ['amit.kumar@kockpit.in'],
+    'start_date': datetime(2022, 12,20, tzinfo=local_tz),
+    'email': ['abhishek@kockpit.in'],
     'email_on_failure': True,
     'email_on_retry': True,
     'retries': 1,
     'retry_delay': timedelta(minutes=1),
+    'max_active_runs': 1,
     'end_date': datetime(2025, 2, 15, tzinfo=local_tz)
 }
 
 
-dag = DAG('Ingestion', default_args=dagargs, catchup=False,schedule_interval="0 2 * * *")
-for i in range(len(path_f)):
-    DataIngestion = BashOperator(
-        task_id="ingestion"+str(i),
-        bash_command=" python3 "+path_f[i]+"/transformation.py",
-        dag=dag)
+with DAG('DataCleaning',
+         schedule_interval=None,
+         default_args=dagargs,
+         max_active_runs= 1,
+         is_paused_upon_creation=True,
+         catchup=False)as dag:
+    def Data_Cleaning():
+        for i in range(len(Script_Path)):
+            Data_Cleaning = BashOperator(
+            task_id="Data_Cleaning"+str(i),
+            wait_for_downstream=True,
+            bash_command=" python3 "+Script_Path[i]+"/DataCleaning.py",
+            )
+    Data_Cleaning()
 
 
 

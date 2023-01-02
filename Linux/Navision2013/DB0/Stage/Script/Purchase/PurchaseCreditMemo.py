@@ -95,4 +95,4 @@ def purchase_PurchaseCreditMemo():
         log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)        
     print('Purchase PurchaseCreditMemo completed: ' + str((dt.datetime.now()-st).total_seconds()))
 if __name__ == "__main__":
-    purchase_PurchaseCreditMemo       
+    purchase_PurchaseCreditMemo()       

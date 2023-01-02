@@ -1,3 +1,4 @@
+import datetime
 import datetime as dt
 import multiprocessing
 import threading, queue
@@ -27,13 +28,6 @@ for folders in os.listdir(root_directory):
                 DBList.insert(0,folders )
 Connection =abspath(join(join(dirname(__file__), '..'),'..',DBList[0]))
 sys.path.insert(0, Connection)
-from Configuration.Constant import *
-from Configuration.AppConfig import * 
-from Configuration.Constant import *
-from Configuration.udf import *
-from Configuration import udf as Kockpit
-from DB0 import Common 
-from DB0 import Stage
 from Stage.Script.Masters.Calendar import masters_calendar
 from Stage.Script.Masters.BRANCH_Dimension import masters_BRANCH_Dimension
 from Stage.Script.Masters.BU_Dimension import masters_BU_Dimension
@@ -89,7 +83,7 @@ print('Stage_DB0  Transformation: ', datetime.datetime.now())
 moduleName = sys.argv[1] if len(sys.argv) > 1 else ''
 
 try:   
-    print('Transformation start: ', datetime.datetime.now())
+    print('DB0 Transformation start: ', datetime.datetime.now())
     
     #------------------------------------ MASTERS -------------------------------------
             
@@ -113,7 +107,7 @@ try:
         masters_Item()
         masters_Employee()
         PowerBI_Masters_Refresh()
-    # #------------------------------------ Sales ----------------------------------------
+    #------------------------------------ Sales ----------------------------------------
     if moduleName == '' or moduleName == 'Sales':
         sales_Receivables()
         sales_Receivables_Snapshot()
@@ -123,7 +117,7 @@ try:
         sales_SalesOrder()
         sales_SalesTarget()
         PowerBI_Sales_Refresh()
-    # #------------------------------------ Purchase --------------------------------------
+    #------------------------------------ Purchase --------------------------------------
     if moduleName == '' or moduleName == 'Purchase':
         purchase_Payables_Snapshot()
         purchase_PurchaseArchive()
@@ -134,7 +128,7 @@ try:
         purchase_PurchaseOrder()
         purchase_PurchasePayment()
         PowerBI_Purchase_Refresh()
-    # #------------------------------------ Finance --------------------------------------
+    #------------------------------------ Finance --------------------------------------
     if moduleName == '' or moduleName == 'Finance':
         finance_BalanceSheet()
         finance_Budget()
@@ -143,11 +137,12 @@ try:
         finance_MISPNL()
         finance_ProfitLoss()
         PowerBI_Finance_Refresh()
-    # #------------------------------------ Inventory --------------------------------------
+    #------------------------------------ Inventory --------------------------------------
     if moduleName == '' or moduleName == 'Inventory':
         inventory_StockAgeing()
         PowerBI_Inventory_Refresh()
-    print('Transformation Ended: ' + str((dt.datetime.now()-st).total_seconds()))
+        
+    print('DB0 Transformation Ended: ' + str((dt.datetime.now()-st).total_seconds()))
 except Exception as ex:
     print(ex)
     exc_type,exc_value,exc_traceback=sys.exc_info()

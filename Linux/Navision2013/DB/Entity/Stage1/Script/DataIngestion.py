@@ -15,16 +15,16 @@ from pyspark.sql import functions as F
 import pandas as pd
 import os,sys,subprocess
 from os.path import dirname, join, abspath
-helpersDir = abspath(join(join(dirname(__file__), '..'),'..','..'))
-sys.path.insert(0, helpersDir)
 Abs_Path =abspath(join(join(dirname(__file__),'..'),'..'))
 Kockpit_Path =abspath(join(join(dirname(__file__),'..','..','..','..')))
 st = dt.datetime.now()
+DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..'))
+EntityNamepath=abspath(join(join(dirname(__file__), '..'),'..'))
+sys.path.insert(0, DBNamepath)
+sys.path.insert(0, EntityNamepath)
 from Configuration import  AppConfig as ac
 from Configuration.Constant import *
 from Configuration.udf import *
-DBNamepath= abspath(join(join(dirname(__file__), '..'),'..','..'))
-EntityNamepath=abspath(join(join(dirname(__file__), '..'),'..'))
 DBName =os.path.split(DBNamepath)
 EntityName =os.path.split(EntityNamepath)
 DBName = DBName[1]
@@ -57,7 +57,21 @@ def dataFrameWriterIntoHDFS(colSelector, tblFullName, sqlurl, hdfsLoc, dirnameIn
     tblQuery = "(SELECT "+ colSelector +" FROM ["+tblFullName+"]) AS FullWrite"
     tableDataDF = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=tblQuery,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=100000,batchsize=100000).load() 
     tableDataDF = tableDataDF.select([F.col(col).alias(col.replace(' ', '').replace('(', '').replace(')', '')) for col in tableDataDF.columns])
-    tableDataDF.write.option("maxRecordsPerFile", 5000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(hdfsLoc)
+    tableDataDF.write.option("maxRecordsPerFile", 20000).format("delta").mode("overwrite").option("overwriteSchema", "true").save(hdfsLoc)
+def vacuum_ParquetData():
+    for entityObj in ac.config["DbEntities"]:
+        entity = entityObj["Name"]
+        entityLoc = entityObj["Location"]
+        DB_EN_list=entityLoc.split('E')
+        DB=DB_EN_list[0]
+        EntityName='E'+DB_EN_list[1]
+        entityLocation=DB+"/"+EntityName
+        if entityLoc==ENTITY_LOCATION_LOCAL:
+            for Table in ac.config["TablesToIngest"]:
+                HDFS_Path =  HDFS_PATH+DIR_PATH +"/"+ entityLocation + "/Stage1/ParquetData/" + Table['Table']
+                dtTable=DeltaTable.forPath(spark, HDFS_Path)
+                dtTable.vacuum(1)
+                print(HDFS_Path + 'Data Cleaned ')
 def schemaWriterIntoHDFS(sqlurl, HDFSDatabase, SQLNAVSTRING):
     fullschemaQuery = "(SELECT COLUMN_NAME,DATA_TYPE,TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WITH (NOLOCK) where TABLE_NAME like '" + SQLNAVSTRING + "%') AS FullSchema"
     fullschema = spark.read.format(ConnectionInfo.JDBC_PARAM).options(url=sqlurl,dbtable=fullschemaQuery,driver=ConnectionInfo.SQL_SERVER_DRIVER,fetchsize=10000).load() 
@@ -224,6 +238,24 @@ def Configurator(ConfTab, STAGE1_Configurator_Path,DB,EntityName):
         log_dict = logger.getErrorLoggedRecord('DataIngestion'+ConfTab, DBName, EntityName, str(ex), exc_traceback.tb_lineno, IDEorBatch)
         log_df = spark.createDataFrame(log_dict, logger.getSchema())
         log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props)     
+def vacuum_Configurator():
+    table_names = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl,dbtable='information_schema.tables',user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver=ConfiguratorDbInfo.props["driver"]).load().\
+    filter("table_schema = '"+ConfiguratorDbInfo.Schema+"'").select("table_name")
+    table_names_list = [row.table_name for row in table_names.collect()]
+    for entityObj in ac.config["DbEntities"]:
+        entity = entityObj["Name"]
+        entityLoc = entityObj["Location"]
+        DB_EN_list=entityLoc.split('E')
+        DB=DB_EN_list[0]
+        EntityName='E'+DB_EN_list[1]
+        entityLocation=DB+"/"+EntityName
+        dbName = entityObj["DatabaseName"]
+        if entityLoc==ENTITY_LOCATION_LOCAL:
+            for ConfTab in table_names_list:
+                ConfTab_Path=STAGE1_Configurator_Path+ConfTab
+                Conf_Table=DeltaTable.forPath(spark, ConfTab_Path)
+                Conf_Table.vacuum(1)
+                print(ConfTab_Path,'Data Cleaned')
 def Config_reload():  
     table_names = spark.read.format("jdbc").options(url=ConfiguratorDbInfo.PostgresUrl,dbtable='information_schema.tables',user=ConfiguratorDbInfo.props["user"],password=ConfiguratorDbInfo.props["password"],driver=ConfiguratorDbInfo.props["driver"]).load().\
     filter("table_schema = '"+ConfiguratorDbInfo.Schema+"'").select("table_name")
@@ -273,8 +305,15 @@ def Config_reload():
                     log_df = spark.createDataFrame(log_dict, logger.getSchema())
                     log_df.write.jdbc(url=PostgresDbInfo.PostgresUrl, table="logs.logs", mode='append', properties=PostgresDbInfo.props) 
 
-
-
+def vacuum(Type):
+    if Type=='vacuum_ParquetData':
+        vacuum_ParquetData()
+    elif Type=='vacuum_Configurator':
+        vacuum_Configurator()
+    else:
+        vacuum_ParquetData()
+        vacuum_Configurator()
+    print('Vacuum Complete: ', datetime.datetime.now())
 def Reload(Type):
     if Type=='FULL':
         full_reload()
@@ -289,6 +328,7 @@ def Reload(Type):
     for j in jobs:
         j.join()
     print('Stage 1 Full_reload end: ', datetime.datetime.now())
+
 if __name__ == "__main__":
     
-    Reload('FULL')
+    Reload('')
