@@ -19,7 +19,7 @@ Script_Path=[]
 
 c='Common'
 root_directory=abspath(join(join(dirname(__file__),'..','..')))
-kockpit_path=""
+kockpit_path="#ConfiguratorInstallationDrive"
 
 sys.path.insert(0, kockpit_path)
 for folders in os.listdir(kockpit_path):
