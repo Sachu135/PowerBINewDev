@@ -395,6 +395,7 @@ def getSparkConfig(master, appName):
         .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\
         .set("spark.databricks.delta.vacuum.parallelDelete.enabled",'true')\
         .set("spark.databricks.delta.retentionDurationCheck.enabled",'false')\
+        .set("spark.sql.sources.parallelPartitionDiscovery.parallelism",'500')\
         .set('spark.hadoop.mapreduce.output.fileoutputformat.compress', 'false')\
         .set("spark.rapids.sql.enabled", True)\
         .set("spark.sql.legacy.parquet.int96RebaseModeInWrite", "CORRECTED")
