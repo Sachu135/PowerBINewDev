@@ -93,18 +93,18 @@ class Logger:
 class PowerBISync:
     LOGIN_URL = 'https://login.microsoftonline.com/common/oauth2/token'
     LOGIN_REQUEST_PARAMS = {'grant_type': 'password',
-         'username': '',
-         'password': '',
-         'client_id': '',
-         'client_secret': '',
+         'username': '#Azure_PowerBIId',
+         'password': '#Azure_Password',
+         'client_id': '#Azure_ClientId',
+         'client_secret': '#Azure_ClientSecret',
          'resource': 'https://analysis.windows.net/powerbi/api',
          'prompy': 'admin_consent'}
-    WORKSPACE_ID = ''
-    Masters_Dataset=""
-    Sales_Dataset=""
-    Purchase_Dataset=""
-    Finance_Dataset=""
-    Inventory_Dataset=""
+    WORKSPACE_ID = '#Azure_WorkSpaceId'
+    Masters_Dataset="#Azure_MastersDS"
+    Sales_Dataset="#Azure_PurchaseDS"
+    Purchase_Dataset="#Azure_SalesDS"
+    Finance_Dataset="#Azure_FinanceDS"
+    Inventory_Dataset="#Azure_InventoryDS"
     GET_WORKSPACE_DATASET = 'https://api.powerbi.com/v1.0/myorg/groups/' + WORKSPACE_ID + '/datasets'
     REFRESH_WORKSPACE_DATASETS = 'https://api.powerbi.com/v1.0/myorg/groups/' + WORKSPACE_ID + '/datasets/{0}/refreshes'
     REFRESH_NOTIFY_OPTION = {'notifyOption': 'MailOnFailure'}
