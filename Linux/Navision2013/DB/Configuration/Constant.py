@@ -5,7 +5,7 @@ MnSt = 4
 yr = 3
 owmode = 'overwrite'
 apmode = 'append'
-HDFS_PATH = "hdfs://master:9000"
+HDFS_PATH = "hdfs://#ConfiguratorDbInfo_ServerIP:9000"
 DIR_PATH="/home/hadoop/KOCKPIT"
 SPARK_MASTER = 'spark://#ConfiguratorDbInfo_ServerIP:7077'
 class PostgresDbInfo:
